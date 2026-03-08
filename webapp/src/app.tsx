@@ -1672,7 +1672,8 @@ export class ProjectView
         }
 
         // If user is signed in, sync this project to the cloud.
-        if (this.hasCloudSync()) {
+        // AIDEV-NOTE: controller 모드에서는 cloud 동기화가 불필요하므로 cloudUserId를 설정하지 않는다.
+        if (this.hasCloudSync() && !pxt.shell.isControllerMode()) {
             h.cloudUserId = this.getUserProfile()?.id;
         }
 

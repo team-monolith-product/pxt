@@ -613,7 +613,8 @@ export async function saveAsync(h: Header, text?: ScriptText, fromCloudSync?: bo
         h.targetVersion = h.targetVersion || "0.0.0";
 
         // cloud user association
-        if (auth.hasIdentity() && auth.loggedIn()) {
+        // AIDEV-NOTE: controller 모드에서는 cloud 동기화가 불필요하므로 cloudUserId를 설정하지 않는다.
+        if (auth.hasIdentity() && auth.loggedIn() && !pxt.shell.isControllerMode()) {
             h.cloudUserId = auth.userProfile()?.id
         }
     }

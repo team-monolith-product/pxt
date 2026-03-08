@@ -240,6 +240,9 @@ export type SyncAsyncOptions = {
 
 let inProgressSyncPromise: Promise<pxt.workspace.Header[]>;
 export async function syncAsync(opts?: SyncAsyncOptions): Promise<pxt.workspace.Header[]> {
+    // AIDEV-NOTE: controller 모드에서는 클라우드 동기화가 불필요하며,
+    // 인증 토큰이 없어 /api/user/project 호출 시 403이 발생한다.
+    if (pxt.shell.isControllerMode()) { return []; }
     if (!auth.hasIdentity()) { return []; }
     if (!auth.loggedIn()) { return []; }
 
