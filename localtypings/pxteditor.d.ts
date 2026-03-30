@@ -260,6 +260,8 @@ declare namespace pxt.editor {
         // (optional) filtering argument
         filters?: ProjectFilters;
         searchBar?: boolean;
+        // TASK-5524: importProject에서 id갱신 방지
+        dontOverwriteID?: boolean;
     }
 
     export interface EditorMessageImportExternalProjectRequest extends EditorMessageRequest {
@@ -895,7 +897,8 @@ declare namespace pxt.editor {
         saveProjectAsync(): Promise<void>;
         loadHeaderAsync(h: pxt.workspace.Header): Promise<void>;
         reloadHeaderAsync(): Promise<void>;
-        importProjectAsync(prj: pxt.workspace.Project, editorState?: EditorState): Promise<void>;
+        // TASK-5524: importProject에서 id갱신 방지
+        importProjectAsync(prj: pxt.workspace.Project, editorState?: EditorState, dontOverwriteID?: boolean): Promise<void>;
         importTutorialAsync(markdown: string): Promise<void>;
         openProjectByHeaderIdAsync(headerId: string): Promise<void>;
         overrideTypescriptFile(text: string): void;
