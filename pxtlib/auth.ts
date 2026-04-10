@@ -130,15 +130,6 @@ namespace pxt.auth {
         return !!(await getAuthTokenAsync());
     }
 
-    export async function getAuthHeadersAsync(authToken?: string): Promise<pxt.Map<string>> {
-        const headers: pxt.Map<string> = {};
-        const token = pxt.cookie.getCookieToken();
-        if (token) {
-            headers["Authorization"] = `Bearer ${token}`;
-        }
-        headers[X_PXT_TARGET] = pxt.appTarget?.id;
-        return headers;
-    }
     async function delAuthTokenAsync(): Promise<void> {
         cachedHasAuthToken = false;
         return await setLocalStorageValueAsync(CSRF_TOKEN_KEY, undefined);
@@ -167,6 +158,15 @@ namespace pxt.auth {
         return await pxt.storage.shared.delAsync(AUTH_CONTAINER, AUTH_USER_STATE_KEY);
     }
 
+    export async function getAuthHeadersAsync(authToken?: string): Promise<pxt.Map<string>> {
+        const headers: pxt.Map<string> = {};
+        const token = pxt.cookie.getCookieToken();
+        if (token) {
+            headers["Authorization"] = `Bearer ${token}`;
+        }
+        headers[X_PXT_TARGET] = pxt.appTarget?.id;
+        return headers;
+    }
     export abstract class AuthClient {
         constructor() {
             // Set global instance.
@@ -609,18 +609,7 @@ namespace pxt.auth {
         }
 
         static async staticApiAsync<T = any>(url: string, data?: any, method?: string, authToken?: string): Promise<ApiResult<T>> {
-            const headers: pxt.Map<string> = {};
-            /*
-            authToken = authToken || (await getAuthTokenAsync());
-            if (authToken) {
-                headers["authorization"] = `mkcd ${authToken}`;
-            }
-            */
-            const token = pxt.cookie.getCookieToken();
-            if (token) {
-                headers["Authorization"] =  `Bearer ${token}`;
-            }
-            headers[X_PXT_TARGET] = pxt.appTarget?.id;
+            const headers: pxt.Map<string> = await getAuthHeadersAsync(authToken);
 
             /*
             url = pxt.BrowserUtils.isLocalHostDev() ? `${pxt.cloud.DEV_BACKEND}${url}` : url;
