@@ -6,6 +6,7 @@ import { getDefinition } from "../plugins/functions";
 import { CommonFunctionBlock } from "../plugins/functions/commonFunctionMixin";
 import { PXT_WARNING_ID } from "./compiler";
 import { DRAGGABLE_PARAM_INPUT_PREFIX } from "../loader";
+import { getContainingFunction } from "../plugins/duplicateOnDrag";
 
 interface DeclaredVariable {
     name: string;
@@ -435,6 +436,8 @@ function getReturnTypeOfFunction(e: Environment, name: string) {
             const returnTypes: Point[] = [];
             for (const child of definition.getDescendants(false)) {
                 if (child.type === "function_return") {
+
+                    if (getContainingFunction(child) !== definition) continue;
                     attachPlaceholderIf(e, child, "RETURN_VALUE");
                     returnTypes.push(returnType(e, getInputTargetBlock(e, child, "RETURN_VALUE")));
                 }
@@ -687,7 +690,7 @@ function getCBParameters(b: Blockly.Block, stdfun: StdFunc, e: Environment): Dec
                 varName = varBlock && varBlock.getField("VAR").getText();
             }
 
-            if (varName !== null) {
+            if (varName !== null && varName !== undefined) {
                 handlerArgs.push({
                     name: varName,
                     type: mkPoint(arg.type)

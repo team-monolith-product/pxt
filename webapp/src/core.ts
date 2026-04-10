@@ -342,12 +342,12 @@ export const SPACE_KEY = 32;
 export function getHighContrastOnce(): boolean {
     return ThemeManager.isCurrentThemeHighContrast();
 }
-export function toggleHighContrast() {
-    setHighContrast(!getHighContrastOnce())
-}
-export async function setHighContrast(on: boolean) {
-    sendUpdateFeedbackTheme(on);
-    await auth.setHighContrastPrefAsync(on);
+
+/**
+ * Returns true if keyboard controls should be enabled by default.
+ */
+export function isKeyboardControlsByDefault(): boolean {
+    return /keyboardcontrols=1/i.test(window.location.href);
 }
 
 export async function toggleAccessibleBlocks(eventSource: string) {

@@ -232,6 +232,14 @@ pre {
             filter: none;
         }
     }
+
+    .fullscreen-button {
+        i {
+            margin: 0;
+            width: inherit;
+            opacity: 0.9;
+        }
+    }
 }
 
 .editor-sidebar .simtoolbar .ui.button:focus-visible {
@@ -434,6 +442,33 @@ div.simframe > iframe {
     display: flex;
 }
 
+.settings-menuitem, .help-dropdown-menuitem {
+    flex-shrink: 0;
+
+    ul.common-menu-dropdown-pane {
+        overflow-y: auto;
+        overflow-x: hidden;
+        max-height: calc(100vh - @mainMenuHeight);
+    }
+
+    & > button.common-button {
+        &:focus-visible {
+            background: var(--pxt-neutral-alpha10);
+            color: #fff;
+            outline: 3px solid var(--pxt-neutral-stencil3);
+            outline-offset: -3px
+        }
+
+        &:focus-visible::after {
+            outline: none;
+            border: none;
+        }
+
+        & > span > i {
+            opacity: 0.9;
+        }
+    }
+}
 
 
 /* toggle style */
@@ -570,6 +605,11 @@ div.simframe > iframe {
     margin-bottom: 1px;
 }
 
+.ui.item.logo button.name,
+.ui.item.logo button.name-short {
+    margin-left: 0 !important;
+}
+
 .ui.item.logo .name-short {
     display: none;
 }
@@ -583,6 +623,13 @@ div.simframe > iframe {
     margin: 0 1rem;
     height: 1.4rem;
 }
+
+.ui.item.logo .logo-button {
+    img {
+        margin: 3px 0 0 0 !important;
+    }
+}
+
 
 /* Native Host (iOS app) back button */
 .nativeback.ui.item {
@@ -762,7 +809,7 @@ div.simframe > iframe {
 
 .notificationBannerVisible #simulator .editor-sidebar,
 .notificationBannerVisible #maineditor,
-.notificationBannerVisible #sidedocs {
+.notificationBannerVisible.sideDocs #sidedocs {
     top: calc(@mainMenuHeight + @bannerHeight);
 }
 
@@ -779,6 +826,7 @@ div.simframe > iframe {
     display: flex;
     flex-direction: row;
     align-items: center;
+    width: 100%;
     .bannerLeft {
         display: block;
         .content {
@@ -1034,6 +1082,13 @@ Field editors
             .common-button-label {
                 display: none;
             }
+        }
+    }
+
+    .settings-menuitem, .help-dropdown-menuitem {
+        ul.common-menu-dropdown-pane {
+            overflow-y: auto;
+            max-height: calc(100vh - @mobileMenuHeight);
         }
     }
 }
@@ -1550,7 +1605,9 @@ p.ui.font.small {
     .menubar .ui.item:not(.logo),
     #maineditor,
     #editortools,
-    #serialPreview {
+    #serialPreview,
+    .settings-menuitem,
+    .help-dropdown-menuitem  {
         display: none !important;
         z-index: -10 !important;
     }
@@ -2818,6 +2875,10 @@ select.ui.dropdown {
 .newproject {
     .expandable-menu {
         font-size: 12px !important;
+    }
+
+    .language-restriction-dropdown > button {
+        min-width: 18rem;
     }
 }
 

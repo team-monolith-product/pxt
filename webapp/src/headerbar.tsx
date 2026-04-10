@@ -14,6 +14,7 @@ import * as tutorial from "./tutorial";
 
 import ISettingsProps = pxt.editor.ISettingsProps;
 import { ThemeManager } from "../../react-common/components/theming/themeManager";
+import { Button } from "../../react-common/components/controls/Button";
 
 type HeaderBarView = "home" | "editor" | "tutorial" | "tutorial-tab" | "debugging" | "sandbox" | "time-machine";
 const LONGPRESS_DURATION = 750;
@@ -107,7 +108,7 @@ export class HeaderBar extends data.Component<ISettingsProps, {}> {
             return <></>;
         }
 
-        return <div className="ui item logo organization" role="presentation">
+        return <div className="ui item logo organization" aria-hidden="true">
             {targetTheme.organizationWideLogo || targetTheme.organizationLogo
                 ? <img className={`ui logo ${view !== "home" ? "mobile hide" : ""}`} src={targetTheme.organizationWideLogo || targetTheme.organizationLogo} alt={lf("{0} Logo", targetTheme.organization)} />
                 : <span className="name">{targetTheme.organization}</span>}
@@ -123,16 +124,40 @@ export class HeaderBar extends data.Component<ISettingsProps, {}> {
         const shouldLinkHome = pxt.shell.hasHomeScreen() && view !== "home";
 
         const role = shouldLinkHome ? "menuitem" : "presentation";
-        const onClickHandler = shouldLinkHome ? this.brandIconClick : undefined;
 
         // TODO: "sandbox" view components are temporary share page layout
-        return <div aria-label={lf("{0} Logo", targetTheme.boardName)} role={role} className={`ui item logo brand ${view !== "sandbox" && view !== "home" ? "mobile hide" : ""}`} onClick={onClickHandler}>
+        return <div aria-hidden={!shouldLinkHome} role={role} className={`ui item logo brand ${view !== "sandbox" && view !== "home" ? "mobile hide" : ""}`}>
             {targetTheme.useTextLogo
-            ? [ <span className="name" key="org-name">{targetTheme.organizationText}</span>,
-                <span className="name-short" key="org-name-short">{targetTheme.organizationShortText || targetTheme.organizationText}</span> ]
-            : (targetTheme.logo || targetTheme.portraitLogo
-                ? <img className={`ui ${targetTheme.logoWide ? "small" : ""} logo`} src={targetTheme.logo || targetTheme.portraitLogo} alt={lf("{0} Logo", targetTheme.boardName)} />
-                : <span className="name">{targetTheme.boardName}</span>)}
+            ? (shouldLinkHome
+                ? [<Button className="name menu-button" key="org-name"
+                    onClick={this.brandIconClick}
+                    title={lf("MakeCode {0} Logo, return to home page", targetTheme.boardName)}
+                    ariaLabel={lf("MakeCode {0} Logo, return to home page", targetTheme.boardName)}
+                    label={targetTheme.organizationText} />,
+                <Button className="name-short menu-button" key="org-name-short"
+                    onClick={this.brandIconClick}
+                    title={lf("MakeCode {0} Logo, return to home page", targetTheme.boardName)}
+                    ariaLabel={lf("MakeCode {0} Logo, return to home page", targetTheme.boardName)}
+                    label={targetTheme.organizationShortText || targetTheme.organizationText} />]
+                : [ <span className="name" key="org-name">{targetTheme.organizationText}</span>,
+                    <span className="name-short" key="org-name-short">{targetTheme.organizationShortText || targetTheme.organizationText}</span> ])
+            : (shouldLinkHome
+                ? (targetTheme.logo || targetTheme.portraitLogo
+                    ? <Button className="logo-button menu-button"
+                        onClick={this.brandIconClick}
+                        title={lf("MakeCode {0} Logo, return to home page", targetTheme.boardName)}
+                        ariaLabel={lf("MakeCode {0} Logo, return to home page", targetTheme.boardName)}
+                        >
+                            <img className={`ui ${targetTheme.logoWide ? "small" : ""} logo`} src={targetTheme.logo || targetTheme.portraitLogo} alt={lf("{0} Logo", targetTheme.boardName)} />
+                        </Button>
+                    : <Button className="name menu-button"
+                        onClick={this.brandIconClick}
+                        title={lf("MakeCode {0} Logo, return to home page", targetTheme.boardName)}
+                        ariaLabel={lf("MakeCode {0} Logo, return to home page", targetTheme.boardName)}
+                        label={targetTheme.boardName} />)
+                : (targetTheme.logo || targetTheme.portraitLogo
+                    ? <img className={`ui ${targetTheme.logoWide ? "small" : ""} logo`} src={targetTheme.logo || targetTheme.portraitLogo} alt={lf("{0} Logo", targetTheme.boardName)} />
+                    : <span className="name">{targetTheme.boardName}</span>))}
         </div>
     }
 
@@ -154,7 +179,7 @@ export class HeaderBar extends data.Component<ISettingsProps, {}> {
                 if (!hideIteration) return <tutorial.TutorialMenu parent={this.props.parent} />
                 break;
             case "tutorial-tab":
-                if (tutorialOptions && (pxt.appTarget?.appTheme?.tutorialSimSidebarLayout || pxt.BrowserUtils.isTabletSize())) {
+                if (tutorialOptions && (pxt.BrowserUtils.isTabletSize() || this.props.parent.useTutorialSimSidebarLayout())) {
                     const currentStep = tutorialOptions.tutorialStep ? tutorialOptions.tutorialStep + 1 : undefined;
                     const totalSteps = tutorialOptions.tutorialStepInfo ? tutorialOptions.tutorialStepInfo?.length : undefined;
                     return (
@@ -233,7 +258,16 @@ export class HeaderBar extends data.Component<ISettingsProps, {}> {
                 return <projects.ProjectSettingsMenu parent={this.props.parent} />
             case "tutorial-tab":
             case "editor":
-                return <container.SettingsMenu parent={this.props.parent} greenScreen={greenScreen} accessibleBlocks={accessibleBlocks} showShare={!!header} inBlocks={this.props.parent.isBlocksActive()} />
+                return (
+                    <container.SettingsMenu
+                        parent={this.props.parent}
+                        greenScreen={greenScreen}
+                        accessibleBlocks={accessibleBlocks}
+                        showShare={!!header}
+                        inBlocks={this.props.parent.isBlocksActive()}
+                        inTutorial={this.props.parent.isTutorial()}
+                    />
+                );
             default:
                 return <div />
         }
@@ -275,7 +309,7 @@ export class HeaderBar extends data.Component<ISettingsProps, {}> {
                 {this.getExitButtons(targetTheme, view, tutorialOptions)}
                 {showHomeButton && <sui.Item className={`icon openproject ${hasIdentity ? "mobile hide" : ""}`} role="menuitem" title={lf("Home")} icon="home large" ariaLabel={lf("Home screen")} onClick={this.goHome} />}
                 {showShareButton && <sui.Item className="icon shareproject mobile hide" role="menuitem" title={lf("Publish your game to create a shareable link")} icon="share alternate large" ariaLabel={lf("Share Project")} onClick={this.showShareDialog} />}
-                {showHelpButton && <container.DocsMenu parent={this.props.parent} editor={activeEditor} hasMainBlocksFile={!!pkg.mainEditorPkg().files[pxt.MAIN_BLOCKS]}/>}
+                {showHelpButton && <container.DocsMenu parent={this.props.parent} editor={activeEditor} inBlocks={this.props.parent.isBlocksActive()} />}
                 {this.getSettingsMenu(view)}
                 {false && hasIdentity && (view === "home" || view === "editor" || view === "tutorial-tab") && <identity.UserMenu parent={this.props.parent} />}
             </div>

@@ -424,6 +424,7 @@ declare namespace pxt {
         disableLiveTranslations?: boolean; // don't load translations from crowdin
         extendEditor?: boolean; // whether a target specific editor.js is loaded
         extendFieldEditors?: boolean; // wether a target specific fieldeditors.js is loaded
+        extendScriptPage?: boolean; // if set to true, builds scriptpage.js from scriptPage/ folder when building target
         highContrast?: boolean; // simulator has a high contrast mode
         print?: boolean; //Print blocks and text feature
         greenScreen?: boolean; // display webcam stream in background
@@ -513,7 +514,7 @@ declare namespace pxt {
         errorList?: boolean; // error list experiment
         embedBlocksInSnapshot?: boolean; // embed blocks xml in right-click snapshot
         identity?: boolean; // login with identity providers
-        assetEditor?: boolean; // enable asset editor view (in blocks/text toggle)
+        assetEditor?: boolean | AssetConfig; // enable asset editor view (in blocks/text toggle)
         disableMemoryWorkspaceWarning?: boolean; // do not warn the user when switching to in memory workspace
         embeddedTutorial?: boolean;
         disableBlobObjectDownload?: boolean; // use data uri downloads instead of object urls
@@ -525,7 +526,7 @@ declare namespace pxt {
         tours?: {
             editor?: string // path to markdown file for the editor tour steps
         }
-        tutorialSimSidebarLayout?: boolean; // Enable tutorial layout with the sim in the sidebar (desktop only)
+        tutorialSimSidebarLangs?: string[]; // Enable tutorial layout with sim in sidebar for specific editor languages (blocks, python, or javascript). Desktop only.
         showOpenInVscode?: boolean; // show the open in VS Code button
         matchWebUSBDeviceInSim?: boolean; // if set, pass current device id as theme to sim when available.
         condenseProfile?: boolean; // if set, will make the profile dialog smaller
@@ -539,6 +540,8 @@ declare namespace pxt {
         pxtJsonOptions?: PxtJsonOption[];
         enabledFeatures?: pxt.Map<FeatureFlag>;
         forceEnableAiErrorHelp?: boolean; // Enables the AI Error Help feature, regardless of geo setting.
+        shareHomepageContent?: boolean; // Show buttons to share links to homepage content more easily
+        showProjectDescription?: boolean; // Show project description in pxtjson editor and share dialog
     }
 
     interface DownloadDialogTheme {
@@ -600,6 +603,10 @@ declare namespace pxt {
         label: string;
         property: string;
         type: "checkbox";
+    }
+
+    interface AssetConfig {
+        [index: string /*pxt.AssetType*/]: (boolean | { label?: string; iconClass?: string });
     }
 
     interface TargetBundle extends AppTarget {
@@ -876,6 +883,9 @@ declare namespace ts.pxtc {
         blockImage?: boolean; // for enum variable, specifies that it should use an image from a predefined location
         blockCombine?: boolean;
         blockCombineShadow?: string;
+        blockCombineGetHelp?: string;
+        blockCombineSetHelp?: string;
+        blockCombineChangeHelp?: string;
         blockSetVariable?: string; // show block with variable assigment in toolbox. Set equal to a name to control the var name
         fixedInstances?: boolean;
         fixedInstance?: boolean;
@@ -935,6 +945,10 @@ declare namespace ts.pxtc {
         toolboxParentArgument?: string; // Used with toolboxParent. The name of the arg that this block should be inserted into as a shadow
         duplicateWithToolboxParent?: string; // The ID of an additional block that will be created, which wraps this block in the toolbox. The original (unwrapped) block will also remain in the toolbox.
         duplicateWithToolboxParentArgument?: string; // Used with duplicateWithToolboxParent. The name of the arg that this block should be inserted into as a shadow.
+        blockHandlerKey?: string; // optional field for explicitly declaring the handler key to use to compare duplicate events
+        afterOnStart?: boolean; // indicates an event that should be compiled after on start when converting to typescripts
+        handlerStatement?: boolean; // deprecated, use forceStatement instead
+        forceStatement?: boolean; // indicates that the block for this API should be a statement, regardless of the return value or if it has a handler param
 
         // On namepspace
         subcategories?: string[];
@@ -942,9 +956,6 @@ declare namespace ts.pxtc {
         groupIcons?: string[];
         groupHelp?: string[];
         labelLineWidth?: string;
-        handlerStatement?: boolean; // indicates a block with a callback that can be used as a statement
-        blockHandlerKey?: string; // optional field for explicitly declaring the handler key to use to compare duplicate events
-        afterOnStart?: boolean; // indicates an event that should be compiled after on start when converting to typescript
 
         // on interfaces
         indexerGet?: string;
@@ -1227,12 +1238,14 @@ declare namespace pxt.tutorial {
         globalBlockConfig?: TutorialBlockConfig; // concatenated `blockconfig.global` sections. Contains block configs applicable to all tutorial steps
         globalValidationConfig?: CodeValidationConfig; // concatenated 'validation.global' sections. Contains validation config applicable to all steps
         simTheme?: Partial<pxt.PackageConfig>;
+        hiddenNamespaces?: string[]; // list of categories to put in the toolbox filters of the tutorial project's pxt.json
     }
 
     interface TutorialMetadata {
         activities?: boolean; // tutorial consists of activities, then steps. uses `###` for steps
         explicitHints?: boolean; // tutorial expects explicit hints in `#### ~ tutorialhint` format
-        flyoutOnly?: boolean; // no categories, display all blocks in flyout
+        flyoutOnly?: boolean; // Deprecated. Indicates unifiedToolbox (below) + some Minecraft-HOC-specific UI adjustments.
+        unifiedToolbox?: boolean; // No categories, display all blocks directly in an always-open flyout.
         hideToolbox?: boolean; // hide the toolbox in the tutorial
         hideIteration?: boolean; // hide step control in tutorial
         diffs?: boolean; // automatically diff snippets
@@ -1242,6 +1255,8 @@ declare namespace pxt.tutorial {
         autoexpandOff?: boolean; // INTERNAL TESTING ONLY
         preferredEditor?: string; // preferred editor for opening the tutorial
         hideDone?: boolean; // Do not show a "Done" button at the end of the tutorial
+        hideFromProjects?: boolean; // hide this tutorial from the projects list
+        hideReplaceMyCode?: boolean; // hide the "Replace Code" button in the tutorial
     }
 
     interface TutorialBlockConfigEntry {
@@ -1340,6 +1355,7 @@ declare namespace pxt.tutorial {
         globalBlockConfig?: TutorialBlockConfig; // concatenated `blockconfig.global` sections. Contains block configs applicable to all tutorial steps
         globalValidationConfig?: CodeValidationConfig // concatenated 'validation.global' sections. Contains validation config applicable to all steps
         simTheme?: Partial<pxt.PackageConfig>;
+        hiddenNamespaces?: string[]; // list of categories to put in the toolbox filters of the tutorial project's pxt.json
     }
     interface TutorialCompletionInfo {
         // id of the tutorial
@@ -1358,6 +1374,7 @@ declare namespace pxt.tour {
         sansQuery?: string; // Use this to exclude an element from the cutout
         sansLocation?: BubbleLocation; // relative location of element to exclude
         onStepBegin?: () => void;
+        onStepEnd?: () => void;
         bubbleStyle?: "yellow"; // Currently just have default (unset) & yellow styles. May add more in the future...
     }
     interface TourConfig {

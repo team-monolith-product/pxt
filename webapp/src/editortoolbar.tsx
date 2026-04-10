@@ -25,7 +25,8 @@ interface EditorToolbarState {
 
 export class EditorToolbar extends data.Component<ISettingsProps, EditorToolbarState> {
     protected compileTimeout: number;
-    private compileBtnDropdown: React.RefObject<sui.DropdownMenu>;
+    private computerCompileBtn: React.RefObject<sui.DropdownMenu>;
+    private mobileCompileBtn: React.RefObject<sui.DropdownMenu>;
 
     constructor(props: ISettingsProps) {
         super(props);
@@ -42,7 +43,8 @@ export class EditorToolbar extends data.Component<ISettingsProps, EditorToolbarS
         this.toggleCollapsed = this.toggleCollapsed.bind(this);
         this.cloudButtonClick = this.cloudButtonClick.bind(this);
 
-        this.compileBtnDropdown = React.createRef();
+        this.computerCompileBtn = React.createRef();
+        this.mobileCompileBtn = React.createRef();
     }
 
     saveProjectName(name: string, view?: string) {
@@ -50,10 +52,10 @@ export class EditorToolbar extends data.Component<ISettingsProps, EditorToolbarS
         this.props.parent.updateHeaderName(name);
     }
 
-    compile(view?: string, saveOnly?: boolean) {
+    compile(view?: string) {
         this.setState({ compileState: "compiling" });
         pxt.tickEvent("editortools.download", { view: view, collapsed: this.getCollapsedState() }, { interactiveConsent: true });
-        this.props.parent.compile(saveOnly);
+        this.props.parent.compile();
     }
 
     saveFile(view?: string) {
@@ -170,8 +172,8 @@ export class EditorToolbar extends data.Component<ISettingsProps, EditorToolbarS
         const hasUndo = this.props.parent.editor.hasUndo();
         const hasRedo = this.props.parent.editor.hasRedo();
         return [
-            <EditorToolbarButton icon='xicon undo' className={`editortools-btn undo-editortools-btn ${!hasUndo ? 'disabled' : ''}`} title={lf("Undo")} ariaLabel={lf("{0}, {1}", lf("Undo"), !hasUndo ? lf("Disabled") : "")} onButtonClick={this.undo} view={this.getViewString(view)} key="undo" />,
-            <EditorToolbarButton icon='xicon redo' className={`editortools-btn redo-editortools-btn ${!hasRedo ? 'disabled' : ''}`} title={lf("Redo")} ariaLabel={lf("{0}, {1}", lf("Redo"), !hasRedo ? lf("Disabled") : "")} onButtonClick={this.redo} view={this.getViewString(view)} key="redo" />
+            <EditorToolbarButton icon='xicon undo' className={`editortools-btn undo-editortools-btn ${!hasUndo ? 'disabled' : ''}`} ariaDisabled={!hasUndo} ariaLabel={lf("{0}, {1}", lf("Undo"), !hasUndo ? lf("Disabled") : "")} onButtonClick={this.undo} view={this.getViewString(view)} key="undo" />,
+            <EditorToolbarButton icon='xicon redo' className={`editortools-btn redo-editortools-btn ${!hasRedo ? 'disabled' : ''}`} ariaDisabled={!hasRedo} ariaLabel={lf("{0}, {1}", lf("Redo"), !hasRedo ? lf("Disabled") : "")} onButtonClick={this.redo} view={this.getViewString(view)} key="redo" />
         ];
     }
 
@@ -189,30 +191,27 @@ export class EditorToolbar extends data.Component<ISettingsProps, EditorToolbarS
 
     protected onDownloadButtonClick = async () => {
         pxt.tickEvent("editortools.downloadbutton", { collapsed: this.getCollapsedState() }, { interactiveConsent: true });
-        let pairResult = pxt.commands.WebUSBPairResult.Success;
         if (this.shouldShowPairingDialogOnDownload()
             && !pxt.packetio.isConnected()
             && !pxt.packetio.isConnecting()
         ) {
-            pairResult = await cmds.pairDialogAsync(true);
+            await cmds.pairAsync(true);
         }
-        if (pairResult === pxt.commands.WebUSBPairResult.Success) {
-            this.compile(undefined, false);
-        } else if (pairResult === pxt.commands.WebUSBPairResult.DownloadOnly) {
-            this.compile(undefined, true);
-        }
+        this.compile();
     }
 
-    protected onFileDownloadClick = async () => {
+    protected onFileDownloadClick = async (returnFocusCallback: () => void) => {
         // Matching the tick in the call to compile() above for historical reasons
         pxt.tickEvent("editortools.download", { collapsed: this.getCollapsedState() }, { interactiveConsent: true });
         pxt.tickEvent("editortools.downloadasfile", { collapsed: this.getCollapsedState() }, { interactiveConsent: true });
-        (this.props.parent as ProjectView).compile();
+        await (this.props.parent as ProjectView).compile(true);
+        returnFocusCallback();
     }
 
-    protected onPairClick = () => {
+    protected onPairClick = async (returnFocusCallback: () => void) => {
         pxt.tickEvent("editortools.pair", undefined, { interactiveConsent: true });
-        this.props.parent.pairDialogAsync();
+        await this.props.parent.pairAsync();
+        returnFocusCallback();
     }
 
     protected onCannotPairClick = async () => {
@@ -252,8 +251,9 @@ export class EditorToolbar extends data.Component<ISettingsProps, EditorToolbarS
         });
     }
 
-    protected onDisconnectClick = () => {
-        cmds.showDisconnectAsync();
+    protected onDisconnectClick = async (returnFocusCallback: () => void) => {
+        await cmds.showDisconnectAsync();
+        returnFocusCallback()
     }
 
     protected onHelpClick = () => {
@@ -354,17 +354,22 @@ export class EditorToolbar extends data.Component<ISettingsProps, EditorToolbarS
 
         const extMenuItems: sui.ItemProps[] = pxt.commands.getDownloadMenuItems?.() || [];
 
+        const getMenuRef = () => view === View.Computer ? this.computerCompileBtn : this.mobileCompileBtn;
+        const returnFocus = () => {
+            const ref = getMenuRef();
+            (ref.current.refs.dropdown as HTMLElement).focus();
+        }
         // Add the ... menu
         const usbIcon = pxt.appTarget.appTheme.downloadDialogTheme?.deviceIcon || "usb";
         el.push(
-            <sui.DropdownMenu key="downloadmenu" role="menuitem" icon={`${downloadButtonIcon} horizontal ${hwIconClasses}`} title={lf("Download options")} className={`${hwIconClasses} right attached editortools-btn hw-button button`} dataTooltip={tooltip} displayAbove={true} displayRight={displayRight} closeOnItemClick={true} onShow={
+            <sui.DropdownMenu ref={getMenuRef()} key="downloadmenu" role="menuitem" icon={`${downloadButtonIcon} horizontal ${hwIconClasses}`} title={lf("Download options")} className={`${hwIconClasses} right attached editortools-btn hw-button button`} dataTooltip={tooltip} displayAbove={true} displayRight={displayRight} closeOnItemClick={true} onShow={
                 () => this.forceUpdate() // force update to refresh extMenuItems
             }>
-                {webUSBSupported && !packetioConnected && <sui.Item role="menuitem" icon={usbIcon} text={lf("Connect Device")} tabIndex={-1} onClick={this.onPairClick} />}
+                {webUSBSupported && !packetioConnected && <sui.Item role="menuitem" icon={usbIcon} text={lf("Connect Device")} tabIndex={-1} onClick={() => this.onPairClick(returnFocus)} />}
                 {showUsbNotSupportedHint && <sui.Item role="menuitem" icon={usbIcon} text={lf("Connect Device")} tabIndex={-1} onClick={this.onCannotPairClick} />}
-                {webUSBSupported && (packetioConnecting || packetioConnected) && <sui.Item role="menuitem" icon={usbIcon} text={lf("Disconnect")} tabIndex={-1} onClick={this.onDisconnectClick} />}
+                {webUSBSupported && (packetioConnecting || packetioConnected) && <sui.Item role="menuitem" icon={usbIcon} text={lf("Disconnect")} tabIndex={-1} onClick={() => this.onDisconnectClick(returnFocus)} />}
                 {boards && <sui.Item role="menuitem" icon="microchip" text={hardwareMenuText} tabIndex={-1} onClick={this.onHwItemClick} />}
-                {!extMenuItems?.length && <sui.Item role="menuitem" icon="xicon file-download" text={downloadMenuText} tabIndex={-1} onClick={this.onFileDownloadClick} />}
+                {!extMenuItems?.length && <sui.Item role="menuitem" icon="xicon file-download" text={downloadMenuText} tabIndex={-1} onClick={() => this.onFileDownloadClick(returnFocus)} />}
                 {extMenuItems.map((props, index) => <sui.Item key={index} role="menuitem" tabIndex={-1} {...props} />)}
                 {downloadHelp && <sui.Item role="menuitem" icon="help circle" text={lf("Help")} tabIndex={-1} onClick={this.onHelpClick} />}
             </sui.DropdownMenu>
@@ -382,7 +387,7 @@ export class EditorToolbar extends data.Component<ISettingsProps, EditorToolbarS
         const isTimeMachineEmbed = pxt.shell.isTimeMachineEmbed();
         const readOnly = pxt.shell.isReadOnly();
         const tutorial = tutorialOptions ? tutorialOptions.tutorial : false;
-        const flyoutOnly = editorState && editorState.hasCategories === false;
+        const hideZoomAndUndo = tutorial && tutorialOptions.metadata?.flyoutOnly; // Legacy flag that indicates Minecraft HOC (where zoom & undo are a the top)
         const hideToolbox = tutorial && tutorialOptions.metadata?.hideToolbox;
 
         const disableFileAccessinMaciOs = targetTheme.disableFileAccessinMaciOs && (pxt.BrowserUtils.isIOS() || pxt.BrowserUtils.isMac());
@@ -403,8 +408,8 @@ export class EditorToolbar extends data.Component<ISettingsProps, EditorToolbarS
         const running = simState == SimState.Running;
         const starting = simState == SimState.Starting;
 
-        const showUndoRedo = !readOnly && !debugging && !flyoutOnly && !hideToolbox;
-        const showZoomControls = !flyoutOnly && !hideToolbox;
+        const showUndoRedo = !readOnly && !debugging && !hideZoomAndUndo && !hideToolbox;
+        const showZoomControls = !hideZoomAndUndo && !hideToolbox;
         const showGithub = !!pxt.appTarget.cloud
             && !!pxt.appTarget.cloud.githubPackages
             && targetTheme.githubEditor

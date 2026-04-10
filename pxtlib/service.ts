@@ -504,6 +504,24 @@ namespace ts.pxtc {
                 blocks.push(ex)
             }
 
+            function copyOverHelp(param: "blockCombineGetHelp" | "blockCombineSetHelp" | "blockCombineChangeHelp" | "help") {
+                if (s.attributes[param]) {
+                    if (ex.attributes[param]) {
+                        if (ex.attributes[param] !== s.attributes[param]) {
+                            pxt.debug(`Ignoring duplicate ${param} for get/set/change block: ${s.attributes[param]}`);
+                        }
+                    }
+                    else {
+                        ex.attributes[param] = s.attributes[param];
+                    }
+                }
+            }
+
+            copyOverHelp("blockCombineChangeHelp");
+            copyOverHelp("blockCombineGetHelp");
+            copyOverHelp("blockCombineSetHelp");
+            copyOverHelp("help");
+
             ex.combinedProperties.push(s.qName)
         }
 
@@ -890,6 +908,7 @@ namespace ts.pxtc {
     const booleanAttributes: (keyof CommentAttrs)[] = [
         "advanced",
         "handlerStatement",
+        "forceStatement",
         "afterOnStart",
         "optionalVariableArgs",
         "blockHidden",
@@ -1775,6 +1794,7 @@ namespace ts.pxtc.service {
         localizedCategory?: string;
         builtinBlock?: boolean;
         params?: string;
+        dropdownOptions?: string;
     }
 
     export interface ProjectSearchOptions {

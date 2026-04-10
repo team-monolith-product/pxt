@@ -9,12 +9,19 @@
     z-index: 1;
 }
 
+/*
+Override default button background for the area menu, which requires transparency,
+but still use a fairly opaque one to keep focus/visibility on the main buttons.
+*/
 .area-menu-container .area-button {
-    /*
-    Override default button background for the area menu, which requires transparency,
-    but still use a fairly opaque one to keep focus/visibility on the main buttons.
-    */
     background-color: var(--pxt-neutral-alpha80) !important;
+}
+
+/* 
+ * "User-provided content" header in the import modal.
+ */
+.ui.violet.message .header {
+    color: var(--pxt-colors-purple-background) !important;
 }
 
 /* 
@@ -63,6 +70,11 @@ div.field .ui.toggle.checkbox input:checked~label:before {
     outline: 3px solid var(--pxt-colors-yellow-background) !important;
 }
 
+#blocklySearchInput i {
+    color: var(--pxt-neutral-foreground1);
+    opacity: 1;
+}
+
 /* 
  * Inverted image colors
  */
@@ -75,11 +87,11 @@ div.field .ui.toggle.checkbox input:checked~label:before {
 
 /* Sim toolbar */
 #simulator .editor-sidebar .simtoolbar .debug-button.active,
-#simulator .editor-sidebar .simtoolbar .debug-button.active:hover,
-#simulator .editor-sidebar .simtoolbar .debug-button.active:hover i {
-    /* Make active state more apparent by inverting the colors */
-    background: var(--pxt-neutral-foreground2) !important;
-    color: var(--pxt-neutral-background2) !important;
+#simulator .editor-sidebar .simtoolbar .debug-button.active:hover {
+    /* Make active state more apparent with a yellow border */
+    color: var(--pxt-neutral-foreground2) !important;
+    background: var(--pxt-neutral-background2) !important;
+    border: 3px solid var(--pxt-colors-yellow-background) !important;
 }
 
 /* Image Editor */
@@ -175,4 +187,31 @@ div.field .ui.toggle.checkbox input:checked~label:before {
 #sidedocsbar a:hover span,
 #sidedocsbar a:focus span {
     color: var(--pxt-link-hover) !important;
+}
+
+/*
+ * Editor Toggle
+ */
+#editortoggle .selected.item {
+    transition: none;
+    &:focus {
+        box-shadow: inset 0 0 0 6px #000000 !important;
+    }
+    >.icon {
+        color: #000000 !important;
+    }
+}
+
+#editordropdown.ui.button.active > .icon {
+    color: #000000 !important;
+}
+
+/*
+ * Dropdown Menu
+ */
+.common-menu-dropdown-item:hover,
+.common-menu-dropdown > .menu-button.expanded {
+    outline: var(--pxt-focus-border) solid 3px !important;
+    outline-offset: -4px;
+    z-index: 1;
 }

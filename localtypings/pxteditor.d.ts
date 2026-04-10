@@ -80,9 +80,11 @@ declare namespace pxt.editor {
         | "getblockastext"
 
         | "toggletrace" // EditorMessageToggleTraceRequest
+        | "showthemepicker"
         | "togglehighcontrast"
         | "sethighcontrast" // EditorMessageSetHighContrastRequest
         | "togglegreenscreen"
+        | "togglekeyboardcontrols"
         | "settracestate" //
         | "setsimulatorfullscreen" // EditorMessageSimulatorFullScreenRequest
 
@@ -426,6 +428,7 @@ declare namespace pxt.editor {
         versions: pxt.TargetVersions;
         locale: string;
         availableLocales?: string[];
+        keyboardControls: boolean;
     }
 
     export interface PackageExtensionData {
@@ -821,6 +824,7 @@ declare namespace pxt.editor {
         simSerialActive?: boolean;
         deviceSerialActive?: boolean;
         errorListState?: ErrorListState;
+        errorListCollapsed?: boolean;
         screenshoting?: boolean;
         extensionsVisible?: boolean;
         isMultiplayerGame?: boolean; // Arcade: Does the current project contain multiplayer blocks?
@@ -917,7 +921,7 @@ declare namespace pxt.editor {
         forceUpdate(): void;
 
         reloadEditor(): void;
-        openBlocks(): void;
+        openBlocks(showKeyboardControlsHint?: boolean): void;
         openJavaScript(giveFocusOnLoading?: boolean): void;
         openPython(giveFocusOnLoading?: boolean): void;
         openAssets(): void;
@@ -963,7 +967,7 @@ declare namespace pxt.editor {
         saveAndCompile(): void;
         updateHeaderName(name: string): void;
         updateHeaderNameAsync(name: string): Promise<void>;
-        compile(saveOnly?: boolean): void;
+        compile(): void;
 
         setFile(fn: IFile, line?: number): void;
         setSideFile(fn: IFile, line?: number): void;
@@ -983,6 +987,7 @@ declare namespace pxt.editor {
         completeTutorialAsync(): Promise<void>;
         showTutorialHint(): void;
         isTutorial(): boolean;
+        useTutorialSimSidebarLayout(): boolean;
         onEditorContentLoaded(): void;
         pokeUserActivity(): void;
         stopPokeUserActivity(): void;
@@ -992,7 +997,7 @@ declare namespace pxt.editor {
 
         anonymousPublishHeaderByIdAsync(headerId: string, projectName?: string): Promise<ShareData>;
         publishCurrentHeaderAsync(persistent: boolean, screenshotUri?: string): Promise<string>;
-        publishAsync (name: string, screenshotUri?: string, forceAnonymous?: boolean): Promise<ShareData>;
+        publishAsync (name: string, description?: string,screenshotUri?: string, forceAnonymous?: boolean): Promise<ShareData>;
 
         startStopSimulator(opts?: SimulatorStartOptions): void;
         stopSimulator(unload?: boolean, opts?: SimulatorStartOptions): void;
@@ -1052,6 +1057,7 @@ declare namespace pxt.editor {
         setHighContrast(on: boolean): void;
         toggleGreenScreen(): void;
         toggleAccessibleBlocks(eventSource: string): void;
+        isAccessibleBlocks(): boolean;
         launchFullEditor(): void;
         resetWorkspace(): void;
 
@@ -1100,7 +1106,7 @@ declare namespace pxt.editor {
         showPackageDialog(query?: string): void;
         showBoardDialogAsync(features?: string[], closeIcon?: boolean): Promise<void>;
         checkForHwVariant(): boolean;
-        pairDialogAsync(): Promise<pxt.commands.WebUSBPairResult>;
+        pairAsync(): Promise<boolean>;
 
         createModalClasses(classes?: string): string;
         showModalDialogAsync(options: ModalDialogOptions): Promise<void>;

@@ -44,6 +44,8 @@ export interface ErrorListProps {
         continuationHash?: string,
         dialogMessages?: { signInMessage?: string; signUpMessage?: string }
     ) => void;
+    collapsedByUser?: boolean;
+    onUserCollapse?: (collapsed: boolean) => void;
 }
 
 export interface ErrorListState {
@@ -56,7 +58,7 @@ export class ErrorList extends auth.Component<ErrorListProps, ErrorListState> {
         super(props);
 
         this.state = {
-            isCollapsed: true,
+            isCollapsed: !this.props.errors?.length,
             isLoadingHelp: false,
         };
 
@@ -64,6 +66,10 @@ export class ErrorList extends auth.Component<ErrorListProps, ErrorListState> {
     }
 
     componentDidUpdate(prevProps: Readonly<ErrorListProps>, prevState: Readonly<ErrorListState>, snapshot?: any): void {
+        if (this.props.collapsedByUser) {
+            return;
+        }
+
         // Auto-expand if there are new errors
         if (this.props.errors.length > 0 && this.state.isCollapsed) {
             let shouldExpand = this.props.errors.length > prevProps.errors.length;
@@ -110,6 +116,7 @@ export class ErrorList extends auth.Component<ErrorListProps, ErrorListState> {
             !!getErrorHelp &&
             !!showLoginDialog &&
             !pxt.shell.isReadOnly() &&
+            !pxt.BrowserUtils.isPxtElectron() &&
             (pxt.appTarget.appTheme.forceEnableAiErrorHelp || pxt.Util.isFeatureEnabled("aiErrorHelp"));
 
         const helpLoader = (
@@ -189,6 +196,10 @@ export class ErrorList extends auth.Component<ErrorListProps, ErrorListState> {
             pxt.tickEvent('errorlist.expand', null, { interactiveConsent: true })
         } else {
             pxt.tickEvent('errorlist.collapse', null, { interactiveConsent: true })
+        }
+
+        if (this.props.onUserCollapse) {
+            this.props.onUserCollapse(!this.state.isCollapsed);
         }
 
         this.setState({

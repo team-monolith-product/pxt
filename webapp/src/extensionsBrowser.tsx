@@ -179,13 +179,15 @@ export const ExtensionsBrowser = (props: ExtensionsProps) => {
             core.showLoading("downloadingpackage", lf("downloading extension..."));
             const pkg = getExtensionFromFetched(scr.repo.fullName);
             if (pkg) {
-                r = await pxt.github.downloadLatestPackageAsync(pkg.repo);
+                const useProxy = pxt.github.shouldUseProxyForRepo(pkg.repo.fullName);
+                r = await pxt.github.downloadLatestPackageAsync(pkg.repo, useProxy);
             } else {
                 const res = await fetchGithubDataAsync([scr.repo.fullName]);
                 if (res && res.length > 0) {
                     const parsed = parseGithubRepo(res[0])
                     addExtensionsToPool([parsed])
-                    r = await pxt.github.downloadLatestPackageAsync(parsed.repo)
+                    const useProxy = pxt.github.shouldUseProxyForRepo(parsed.repo.fullName);
+                    r = await pxt.github.downloadLatestPackageAsync(parsed.repo, useProxy)
                 }
             }
         }
@@ -229,7 +231,12 @@ export const ExtensionsBrowser = (props: ExtensionsProps) => {
         // When searching multiple repos at the same time, use 'extension-search' which caches results
         // for much longer than 'gh-search'
         const virtualApi = preferredRepos.length <= 1 ? 'gh-search' : 'extension-search';
-        return data.getAsync<pxt.github.GitRepo[]>(`${virtualApi}:${preferredRepos.join("|")}`);
+
+        // Users can put anything in the search box.
+        // Make sure there are no secrets in it before we send to backend.
+        const cleanedRepos = preferredRepos.map(repo => pxt.Util.cleanData(repo));
+
+        return data.getAsync<pxt.github.GitRepo[]>(`${virtualApi}:${cleanedRepos.join("|")}`);
     }
 
     async function fetchGithubDataAndAddAsync(repos: string[]): Promise<ExtensionMeta[]> {
@@ -303,6 +310,7 @@ export const ExtensionsBrowser = (props: ExtensionsProps) => {
     function parseGithubRepo(r: pxt.github.GitRepo): ExtensionMeta {
         return {
             name: ghName(r),
+            displayName: r.displayName,
             type: ExtensionType.Github,
             imageUrl: pxt.github.repoIconUrl(r),
             repo: r,

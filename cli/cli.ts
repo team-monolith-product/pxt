@@ -34,7 +34,33 @@ import { SUB_WEBAPPS } from './subwebapp';
 
 const rimraf: (f: string, opts: any, cb: (err: Error, res: any) => void) => void = require('rimraf');
 
-pxt.docs.requireDOMSanitizer = () => require("sanitize-html");
+// dompurify requires a DOM implementation; sanitize-html does not.
+// sanitize-html is a bit more aggressive and culls class names by default from code snippets
+// Need to wrap to prevent that. Possibly worth swapping to jsdom + dompurify later for consistency.
+pxt.docs.requireDOMSanitizer = () => {
+    const sanitizeHtml = require("sanitize-html");
+    const defaults = sanitizeHtml.defaults || {};
+    const baseAllowedAttrs = defaults.allowedAttributes || {};
+    const allowedTags = defaults.allowedTags || [];
+
+    const mergeClassAttribute = (tag: string, ...otherAttributes: string[]) => {
+        const existing: string[] = baseAllowedAttrs[tag] || [];
+        return Array.from(new Set<string>([...existing, "class", ...otherAttributes]));
+    };
+
+    const options = {
+        ...defaults,
+        allowedTags: [...allowedTags, "img"],
+        allowedAttributes: {
+            ...baseAllowedAttrs,
+            code: mergeClassAttribute("code"),
+            pre: mergeClassAttribute("pre"),
+            div: mergeClassAttribute("div", "data-youtube", "title"),
+        },
+    };
+
+    return (html: string) => sanitizeHtml(html, options);
+};
 
 let forceCloudBuild = process.env["KS_FORCE_CLOUD"] !== "no";
 let forceLocalBuild = !!process.env["PXT_FORCE_LOCAL"];
@@ -411,14 +437,10 @@ async function ciAsync(parsed?: commandParser.ParsedCommand) {
         tag = tagOverride;
         pxt.log(`overriding tag to ${tag}`);
     }
-    const atok = process.env.NPM_ACCESS_TOKEN
-    const npmPublish = (intentToPublish || /^v\d+\.\d+\.\d+$/.exec(tag)) && atok;
+    const npmPublish = (intentToPublish || /^v\d+\.\d+\.\d+$/.exec(tag)) && process.env.NPM_PUBLISH;
 
     if (npmPublish) {
-        let npmrc = path.join(process.env.HOME, ".npmrc")
-        pxt.log(`setting up ${npmrc} for publish`)
-        let cfg = "//registry.npmjs.org/:_authToken=" + atok + "\n"
-        fs.writeFileSync(npmrc, cfg)
+        pxt.log(`npm publish is true`)
     } else if (intentToPublish) {
         pxt.log("not publishing, no tag or access token")
     }
@@ -447,13 +469,38 @@ async function ciAsync(parsed?: commandParser.ParsedCommand) {
 
     lintJSONInDirectory(path.resolve("."));
     lintJSONInDirectory(path.resolve("docs"));
+    let pkg = readJson("package.json")
 
-    function npmPublishAsync() {
+    async function npmPublishAsync() {
         if (!npmPublish) return Promise.resolve();
+
+        let latest: pxt.semver.Version;
+
+        try {
+            const version = await nodeutil.npmLatestVersionAsync(pkg["name"]);
+            latest = pxt.semver.parse(version);
+        }
+        catch (e) {
+            // no latest tag
+        }
+
+        let distTag: string;
+
+        if (latest) {
+            const current = pxt.semver.parse(pkg["version"]);
+
+            if (pxt.semver.cmp(current, latest) < 0) {
+                distTag = `stable${current.major}.${current.minor}`;
+            }
+        }
+
+        if (distTag) {
+            return nodeutil.runNpmAsync("publish", "--tag", distTag);
+        }
+
         return nodeutil.runNpmAsync("publish");
     }
 
-    let pkg = readJson("package.json")
     if (pkg["name"] == "pxt-core") {
         pxt.log("pxt-core build");
 
@@ -1084,6 +1131,9 @@ function uploadCoreAsync(opts: UploadOptions) {
     let targetFieldEditorsJs = "";
     if (pxt.appTarget.appTheme?.extendFieldEditors)
         targetFieldEditorsJs = "@commitCdnUrl@fieldeditors.js";
+    let targetScriptPageJs = "";
+    if (pxt.appTarget.appTheme?.extendScriptPage)
+        targetScriptPageJs = "@commitCdnUrl@scriptPage.js";
 
     let replacements: Map<string> = {
         "/sim/simulator.html": "@simUrl@",
@@ -1104,6 +1154,7 @@ function uploadCoreAsync(opts: UploadOptions) {
         "@cachedHexFilesEncoded@": encodeURLs(hexFiles),
         "@targetEditorJs@": targetEditorJs,
         "@targetFieldEditorsJs@": targetFieldEditorsJs,
+        "@targetScriptPageJs@": targetScriptPageJs,
         "@targetImages@": targetImagesHashed.length ? targetImagesHashed.join('\n') : '',
         "@targetImagesEncoded@": targetImagesHashed.length ? encodeURLs(targetImagesHashed) : ""
     }
@@ -1163,6 +1214,7 @@ function uploadCoreAsync(opts: UploadOptions) {
             "@cachedHexFilesEncoded@": "",
             "@targetEditorJs@": targetEditorJs ? `${opts.localDir}editor.js` : "",
             "@targetFieldEditorsJs@": targetFieldEditorsJs ? `${opts.localDir}fieldeditors.js` : "",
+            "@targetScriptPageJs@": targetScriptPageJs ? `${opts.localDir}scriptPage.js` : "",
             "@targetImages@": targetImagePaths.length ? targetImageLocalPaths.join('\n') : '',
             "@targetImagesEncoded@": targetImagePaths.length ? encodeURLs(targetImageLocalPaths) : ''
         }
@@ -1561,6 +1613,7 @@ export async function internalBuildTargetAsync(options: BuildTargetOptions = {})
     await buildSemanticUIAsync();
     await buildEditorExtensionAsync("editor", "extendEditor");
     await buildEditorExtensionAsync("fieldeditors", "extendFieldEditors");
+    await buildEditorExtensionAsync("scriptPage", "extendScriptPage");
     await buildFolderAsync('server', true, 'server');
 
     function inCommonPkg(p: string) {
@@ -1837,7 +1890,7 @@ function processLf(filename: string, translationStrings: pxt.Map<string>): void 
                 return;
 
             while (true) {
-                const newLine = line.replace(/\blf(_va)?\s*\(\s*(.*)/, (all, a, args) => {
+                const newLine = line.replace(/\b(?:blf|(?:lf(_va)?))\s*\(\s*(.*)/, (all, a, args) => { // @ignorelf@
                     const m = /^("([^"]|(\\"))+")\s*[\),]/.exec(args)
                     if (m) {
                         try {
@@ -1918,6 +1971,15 @@ function saveThemeJson(cfg: pxt.TargetBundle, localDir?: boolean, packaged?: boo
                 targetStrings[`{id:var}${extraType.defaultName}`] = extraType.defaultName;
             }
         });
+    }
+
+    if (typeof cfg.appTheme?.assetEditor === "object") {
+        for (const key of Object.keys(cfg.appTheme.assetEditor)) {
+            const entry = cfg.appTheme.assetEditor[key];
+            if (typeof entry === "object" && entry.label) {
+                targetStrings[`{id:assetType}${entry.label}`] = entry.label;
+            }
+        }
     }
 
     if (cfg.appTheme?.pxtJsonOptions?.length) {
@@ -2048,7 +2110,7 @@ ${gcards.map(gcard => `[${gcard.name}](${gcard.url})`).join(',\n')}
     }
 
     // extract strings from editor
-    ["editor", "fieldeditors", "cmds"]
+    ["editor", "fieldeditors", "cmds", "scriptPage"]
         .filter(d => nodeutil.existsDirSync(d))
         .forEach(d => nodeutil.allFiles(d)
             .forEach(f => processLf(f, targetStrings))
@@ -2542,6 +2604,8 @@ async function buildTargetCoreAsync(options: BuildTargetOptions = {}) {
             dirsToWatch.push("editor");
         if (fs.existsSync("fieldeditors"))
             dirsToWatch.push("fieldeditors");
+        if (fs.existsSync("scriptPage"))
+            dirsToWatch.push("scriptPage");
         if (fs.existsSync(simDir())) {
             dirsToWatch.push(simDir()); // simulator
             dirsToWatch = dirsToWatch.concat(
@@ -2554,7 +2618,7 @@ async function buildTargetCoreAsync(options: BuildTargetOptions = {}) {
     const hexCachePath = path.resolve(process.cwd(), "built", "hexcache");
     nodeutil.mkdirP(hexCachePath);
 
-    pxt.log(`building target.json in ${process.cwd()}...`)
+    pxt.log(`building target.json in ${process.cwd()}...`);
 
     let builtInfo: pxt.Map<pxt.PackageApiInfo> = {};
 
@@ -2567,7 +2631,7 @@ async function buildTargetCoreAsync(options: BuildTargetOptions = {}) {
 
     await buildWebStringsAsync();
     if (!options.quick) await internalGenDocsAsync(false, true)
-    if (pxt.appTarget.cacheusedblocksdirs) cfg.tutorialInfo = await internalCacheUsedBlocksAsync();
+    if (pxt.appTarget.cacheusedblocksdirs && !options.quick) cfg.tutorialInfo = await internalCacheUsedBlocksAsync();
 
     await forEachBundledPkgAsync(async (pkg, dirname) => {
         pxt.log(`building bundled ${dirname}`);
@@ -6780,7 +6844,7 @@ function extractLocStringsAsync(output: string, dirs: string[]): Promise<void> {
                 return;
 
             while (true) {
-                let newLine = line.replace(/\blf(_va)?\s*\(\s*(.*)/, (all, a, args) => {
+                let newLine = line.replace(/\b(?:blf|(?:lf(_va)?))\s*\(\s*(.*)/, (all, a, args) => { // @ignorelf@
                     let m = /^("([^"]|(\\"))+")\s*[\),]/.exec(args)
                     if (m) {
                         try {
