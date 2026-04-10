@@ -1,5 +1,5 @@
 import * as React from "react";
-import { classList, nodeListToArray, findNextFocusableElement, focusLastActive, ContainerProps, getFocusableDescendants, getTabbableDescendants } from "../../util";
+import { classList, nodeListToArray, findNextFocusableElement, focusLastActive, ContainerProps } from "../../util";
 import { addRegion, FocusTrapProvider, removeRegion, useFocusTrapDispatch, useFocusTrapState } from "./context";
 import { useId } from "../../../hooks/useId";
 
@@ -59,7 +59,10 @@ const FocusTrapInner = (props: FocusTrapProps) => {
     }, [])
 
     const getElements = React.useCallback(() => {
-        let all = includeOutsideTabOrder ? getFocusableDescendants(containerRef.current!) : getTabbableDescendants(containerRef.current!);
+        let all = nodeListToArray(
+            includeOutsideTabOrder ? containerRef.current?.querySelectorAll(`[tabindex]`) :
+            containerRef.current?.querySelectorAll(`[tabindex]:not([tabindex="-1"])`)
+        );
 
         if (regions.length) {
             const regionElements: pxt.Map<Element> = {};

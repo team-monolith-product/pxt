@@ -405,7 +405,8 @@ export class SettingsMenu extends data.Component<SettingsMenuProps, SettingsMenu
             });
         }
 
-        if (packages) {
+        // AIDEV-NOTE: TASK-5524 hideExtensionMenu - codle-react에서 iframe 내 확장 메뉴 숨김 제어를 위해 추가한 로컬 전용 조건 (원본 pxt에 없음)
+        if (packages && !this.props.parent.state.editorState?.hideExtensionMenu) {
             items.push({
                 role: "menuitem",
                 leftIcon: "icon disk outline",
@@ -455,7 +456,8 @@ export class SettingsMenu extends data.Component<SettingsMenuProps, SettingsMenu
             });
         }
 
-        if (!isController) {
+        // AIDEV-NOTE: 원본 pxt의 Delete Project 항목을 fork에서 숨김 (학습 도구 컨텍스트에서 의도치 않은 삭제 방지)
+        if (false && !isController) {
             items.push({
                 role: "menuitem",
                 leftIcon: "icon trash",
@@ -571,7 +573,8 @@ export class SettingsMenu extends data.Component<SettingsMenuProps, SettingsMenu
             });
         }
 
-        if (!isController) {
+        // AIDEV-NOTE: 원본 pxt의 Reset 항목을 fork에서 숨김 (학습 도구 컨텍스트에서 의도치 않은 초기화 방지)
+        if (false && !isController) {
             items.push({
                 role: "menuitem",
                 leftIcon: "icon sign out",

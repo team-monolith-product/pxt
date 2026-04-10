@@ -237,6 +237,8 @@ declare namespace pxt.editor {
         filters?: ProjectFilters;
         // (optional) show or hide the search bar
         searchBar?: boolean;
+        // AIDEV-NOTE: TASK-5524 codle-react에서 iframe 내 확장 메뉴 숨김 제어를 위해 추가한 로컬 전용 속성 (원본 pxt에 없음)
+        hideExtensionMenu?: boolean;
     }
 
     export interface EditorWorkspaceSyncResponse extends EditorMessageResponse {
@@ -265,6 +267,8 @@ declare namespace pxt.editor {
         // (optional) filtering argument
         filters?: ProjectFilters;
         searchBar?: boolean;
+        // TASK-5524: importProject에서 id갱신 방지
+        dontOverwriteID?: boolean;
     }
 
     export interface EditorMessageImportExternalProjectRequest extends EditorMessageRequest {
@@ -835,6 +839,8 @@ declare namespace pxt.editor {
         filters?: pxt.editor.ProjectFilters;
         searchBar?: boolean; // show the search bar in editor
         hasCategories?: boolean; // show categories in toolbox
+        // AIDEV-NOTE: TASK-5524 codle-react에서 iframe 내 확장 메뉴 숨김 제어를 위해 추가한 로컬 전용 속성 (원본 pxt에 없음)
+        hideExtensionMenu?: boolean;
     }
 
     export interface ExampleImportOptions {
@@ -935,7 +941,8 @@ declare namespace pxt.editor {
         saveProjectAsync(): Promise<void>;
         loadHeaderAsync(h: pxt.workspace.Header): Promise<void>;
         reloadHeaderAsync(): Promise<void>;
-        importProjectAsync(prj: pxt.workspace.Project, editorState?: EditorState): Promise<void>;
+        // TASK-5524: importProject에서 id갱신 방지
+        importProjectAsync(prj: pxt.workspace.Project, editorState?: EditorState, dontOverwriteID?: boolean): Promise<void>;
         importTutorialAsync(markdown: string): Promise<void>;
         openProjectByHeaderIdAsync(headerId: string): Promise<void>;
         overrideTypescriptFile(text: string): void;

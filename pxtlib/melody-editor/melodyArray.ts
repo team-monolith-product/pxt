@@ -143,7 +143,7 @@ namespace pxtmelody {
 
     export function noteToRow(note: string): number {
         let rowNum: number = -1;
-        switch (note.toUpperCase()) {
+        switch (note) {
             case "C5": rowNum = 0; break;
             case "B": rowNum = 1; break;
             case "A": rowNum = 2; break;
