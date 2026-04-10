@@ -56,6 +56,21 @@ declare namespace pxt {
         // "acme-corp/pxt-widget": "min:v0.1.2" - auto-upgrade to that version
         // "acme-corp/pxt-widget": "dv:foo,bar" - add "disablesVariant": ["foo", "bar"] to pxt.json
         upgrades?: string[];
+        // This repo's simulator extension configuration
+        simx?: SimulatorExtensionConfig;
+        // if true, this repo will not be shown in extension search results
+        hidden?: boolean;
+    }
+
+    interface SimulatorExtensionConfig {
+        aspectRatio?: number; // Aspect ratio for the iframe. Default: 1.22.
+        permanent?: boolean; // If true, don't recycle the iframe between runs. Default: true.
+        devUrl?: string; // URL to load for local development. Pass `simxdev` on URL to enable. Default: undefined.
+        index?: string; // The path to the simulator extension's entry point within the repo. Default: "index.html".
+        // backend-only options
+        sha?: string; // The commit to checkout (must exist in the branch/ref). Required.
+        repo?: string; // Actual repo to load simulator extension from. Defaults to key of parent in `approvedRepoLib` map.
+        ref?: string; // The branch of the repo to sync. Default: "gh-pages".
     }
 
     interface ShareConfig {
@@ -90,6 +105,8 @@ declare namespace pxt {
     }
 
     interface TeacherToolConfig {
+        showSharePageEvalButton?: boolean; // show the "Evaluate" button on the share page
+        defaultChecklistUrl?: string; // default checklist to use when a project is loaded without a checklist already active
         carousels?: TeacherToolCarouselConfig[];
     }
 
@@ -121,6 +138,7 @@ declare namespace pxt {
         uploadDocs?: boolean; // enable uploading to crowdin on master or v* builds
         variants?: Map<AppTarget>; // patches on top of the current AppTarget for different chip variants
         multiVariants?: string[];
+        disabledVariants?: string[];
         alwaysMultiVariant?: boolean;
         queryVariants?: Map<AppTarget>; // patches on top of the current AppTarget using query url regex
         unsupportedBrowsers?: BrowserOptions[]; // list of unsupported browsers for a specific target (eg IE11 in arcade). check browserutils.js browser() function for strings
@@ -248,6 +266,7 @@ declare namespace pxt {
         stopOnChange?: boolean;
         emptyRunCode?: string; // when non-empty and autoRun is disabled, this code is run upon simulator first start
         hideRestart?: boolean;
+        hideRun?: boolean;
         // moved to theme
         // moved to theme
         // debugger?: boolean;
@@ -267,6 +286,7 @@ declare namespace pxt {
         keymap?: boolean; // when non-empty and autoRun is disabled, this code is run upon simulator first start
 
         // a map of allowed simulator channel to URL to handle specific control messages
+        // DEPRECATED. Use `simx` in targetconfig.json approvedRepoLib instead.
         messageSimulators?: pxt.Map<{
             // the URL to load the simulator, $PARENT_ORIGIN$ will be replaced by the parent
             // origin to validate messages
@@ -277,6 +297,9 @@ declare namespace pxt {
             // don't recycle the iframe between runs
             permanent?: boolean;
         }>;
+        // This is for testing new simulator extensions before adding them to targetconfig.json.
+        // DO NOT SHIP SIMULATOR EXTENSIONS HERE. Add them to targetconfig.json/approvedRepoLib instead.
+        testSimulatorExtensions?: pxt.Map<SimulatorExtensionConfig>;
     }
 
     interface TargetCompileService {
@@ -306,6 +329,11 @@ declare namespace pxt {
         serviceId: string;
         buildEngine?: string;  // default is yotta, set to platformio
         skipCloudBuild?: boolean;
+    }
+
+    interface FeatureFlag {
+        includeRegions?: string[];
+        excludeRegions?: string[];
     }
 
     interface AppTheme {
@@ -397,7 +425,6 @@ declare namespace pxt {
         extendEditor?: boolean; // whether a target specific editor.js is loaded
         extendFieldEditors?: boolean; // wether a target specific fieldeditors.js is loaded
         highContrast?: boolean; // simulator has a high contrast mode
-        accessibleBlocks?: boolean; // enable keyboard navigation in blockly
         print?: boolean; //Print blocks and text feature
         greenScreen?: boolean; // display webcam stream in background
         instructions?: boolean; // display make instructions
@@ -410,6 +437,8 @@ declare namespace pxt {
         blockColors?: Map<string>; // block namespace colors, used for build in categories
         blockIcons?: Map<string | number>;
         blocklyColors?: pxt.Map<string>; // Overrides for the styles in the workspace Blockly.Theme.ComponentStyle
+        defaultColorTheme?: string; // default color theme id for the editor
+        highContrastColorTheme?: string; // theme id for high contrast mode
         socialOptions?: SocialOptions; // show social icons in share dialog, options like twitter handle and org handle
         noReloadOnUpdate?: boolean; // do not notify the user or reload the page when a new app cache is downloaded
         appPathNames?: string[]; // Authorized URL paths in embedded apps, all other paths will display a warning banner
@@ -424,6 +453,7 @@ declare namespace pxt {
         browserDbPrefixes?: { [majorVersion: number]: string }; // Prefix used when storing projects in the DB to allow side-by-side projects of different major versions
         editorVersionPaths?: { [majorVersion: number]: string }; // A map of major editor versions to their corresponding paths (alpha, v1, etc.)
         experiments?: string[]; // list of experiment ids, also enables this feature
+        supportedExperiences?: string[]; // list of supported "experiences" (separate CRAs, like code eval)
         chooseBoardOnNewProject?: boolean; // when multiple boards are support, show board dialog on "new project"
         bluetoothUartConsole?: boolean; // pair with BLE UART services and pipe console output
         bluetoothUartFilters?: { name?: string; namePrefix?: string; }[]; // device name prefix -- required
@@ -482,7 +512,6 @@ declare namespace pxt {
         tutorialExplicitHints?: boolean; // allow use explicit hints
         errorList?: boolean; // error list experiment
         embedBlocksInSnapshot?: boolean; // embed blocks xml in right-click snapshot
-        blocksErrorList?: boolean; // blocks error list experiment
         identity?: boolean; // login with identity providers
         assetEditor?: boolean; // enable asset editor view (in blocks/text toggle)
         disableMemoryWorkspaceWarning?: boolean; // do not warn the user when switching to in memory workspace
@@ -507,6 +536,9 @@ declare namespace pxt {
         timeMachineDiffInterval?: number; // An interval in milliseconds at which to take diffs to store in project history. Defaults to 5 minutes
         timeMachineSnapshotInterval?: number; // An interval in milliseconds at which to take full project snapshots in project history. Defaults to 15 minutes
         adjustBlockContrast?: boolean; // If set to true, all block colors will automatically be adjusted to have a contrast ratio of 4.5 with text
+        pxtJsonOptions?: PxtJsonOption[];
+        enabledFeatures?: pxt.Map<FeatureFlag>;
+        forceEnableAiErrorHelp?: boolean; // Enables the AI Error Help feature, regardless of geo setting.
     }
 
     interface DownloadDialogTheme {
@@ -564,6 +596,12 @@ declare namespace pxt {
         markdown?: string;
     }
 
+    interface PxtJsonOption {
+        label: string;
+        property: string;
+        type: "checkbox";
+    }
+
     interface TargetBundle extends AppTarget {
         bundledpkgs: Map<Map<string>>;   // @internal use only (cache)
         bundleddirs: string[];
@@ -574,6 +612,7 @@ declare namespace pxt {
         versions: TargetVersions;        // @derived
         apiInfo?: Map<PackageApiInfo>;
         tutorialInfo?: Map<BuiltTutorialInfo>; // hash of tutorial code mapped to prebuilt info for each tutorial
+        colorThemeMap?: Map<ColorThemeInfo>; // Color theme id mapped to color theme info
     }
 
     interface BuiltTutorialInfo {
@@ -587,6 +626,15 @@ declare namespace pxt {
     interface PackageApiInfo {
         sha: string;
         apis: ts.pxtc.ApisInfo;
+    }
+
+    interface ColorThemeInfo {
+        id: string; // Unique identifier
+        name: string; // Human-readable name
+        weight?: number; // Lower weights appear first in theme list, no value = go to end
+        overrideCss?: string; // Special css to apply for the theme
+        monacoBaseTheme?: string; // Theme for monaco editor, see https://code.visualstudio.com/docs/getstarted/themes
+        colors: { [key: string]: string }; // Values for theme variables
     }
 
     interface ServiceWorkerEvent {
@@ -744,6 +792,7 @@ declare namespace ts.pxtc {
         utf8?: boolean;
         switches: CompileSwitches;
         deployDrives?: string; // partial name of drives where the .hex file should be copied
+        fileDeployPaths?: pxt.Map<string>; // Path IDs => path for file deployments
         deployFileMarker?: string;
         shortPointers?: boolean; // set to true for 16 bit pointers
         flashCodeAlign?: number; // defaults to 1k
@@ -766,6 +815,7 @@ declare namespace ts.pxtc {
         debugMode?: boolean; // set dynamically, not in config
         compilerExtension?: string; // JavaScript code to load in compiler
         shimRenames?: pxt.Map<string>;
+        unfetteredInitializers?: boolean; // removes isNumericLiteral check on default argument values
     }
 
     type BlockContentPart = BlockLabel | BlockParameter | BlockImage;
@@ -909,6 +959,7 @@ declare namespace ts.pxtc {
         inlineInputModeLimit?: number; // the number of expanded arguments at which to switch from inline to external. only applies when inlineInputMode=variable and expandableArgumentsMode=enabled
         expandableArgumentMode?: string; // can be disabled, enabled, or toggle
         expandableArgumentBreaks?: string; // a comma separated list of how many arguments to reveal/hide each time + or - is pressed on a block. only applies when expandableArgumentsMode=enabled
+        expandArgumentsInToolbox?: boolean; // if true, the block will be fully expanded in the toolbox flyout
         compileHiddenArguments?: boolean; // if true, compiles the values in expandable arguments even when collapsed
         draggableParameters?: string; // can be reporter or variable; defaults to variable
 
@@ -1033,6 +1084,7 @@ declare namespace ts.pxtc {
         pyName?: string;
         pyQName?: string;
         snippetAddsDefinitions?: boolean;
+        isStatic?: boolean;
     }
 
     interface ApisInfo {
@@ -1075,6 +1127,7 @@ declare namespace ts.pxtc {
         clearIncrBuildAndRetryOnError?: boolean; // on error when compiling in service, try again with a full recompile.
         errorOnGreyBlocks?: boolean;
         generateSourceMap?: boolean;
+        tsCompileOptions?: any /* ts.CompilerOptions */; // options to pass to the TypeScript compiler
 
         otherMultiVariants?: ExtensionTarget[];
 
@@ -1092,6 +1145,7 @@ declare namespace ts.pxtc {
 
         /* @internal */
         ignoreFileResolutionErrors?: boolean; // ignores triple-slash directive errors; debug only
+        unfetteredInitializers?: boolean; // removes isNumericLiteral check on default argument values
     }
 
     interface BuiltSimJsInfo {
@@ -1179,6 +1233,7 @@ declare namespace pxt.tutorial {
         activities?: boolean; // tutorial consists of activities, then steps. uses `###` for steps
         explicitHints?: boolean; // tutorial expects explicit hints in `#### ~ tutorialhint` format
         flyoutOnly?: boolean; // no categories, display all blocks in flyout
+        hideToolbox?: boolean; // hide the toolbox in the tutorial
         hideIteration?: boolean; // hide step control in tutorial
         diffs?: boolean; // automatically diff snippets
         noDiffs?: boolean; // don't automatically generated diffs
@@ -1186,6 +1241,7 @@ declare namespace pxt.tutorial {
         codeStop?: string; // command to run when code stops (MINECRAFT HOC ONLY)
         autoexpandOff?: boolean; // INTERNAL TESTING ONLY
         preferredEditor?: string; // preferred editor for opening the tutorial
+        hideDone?: boolean; // Do not show a "Done" button at the end of the tutorial
     }
 
     interface TutorialBlockConfigEntry {
@@ -1297,10 +1353,18 @@ declare namespace pxt.tour {
     interface BubbleStep {
         title: string;
         description: string;
-        targetQuery: string;
+        targetQuery?: string;
         location: BubbleLocation;
         sansQuery?: string; // Use this to exclude an element from the cutout
         sansLocation?: BubbleLocation; // relative location of element to exclude
+        onStepBegin?: () => void;
+        bubbleStyle?: "yellow"; // Currently just have default (unset) & yellow styles. May add more in the future...
+    }
+    interface TourConfig {
+        steps: BubbleStep[];
+        showConfetti?: boolean;
+        numberFinalStep?: boolean; // The last step will only be included in the step count if this is true.
+        footer?: any; // actually 'string | JSX.Element', but this file is included in some compilations that don't include JSX
     }
     const enum BubbleLocation {
         Above,

@@ -40,27 +40,23 @@ interface CatalogItemLabelProps {
     recentlyAdded: boolean;
 }
 const CatalogItemLabel: React.FC<CatalogItemLabelProps> = ({ catalogCriteria, isMaxed, recentlyAdded }) => {
-    const showRecentlyAddedIndicator = recentlyAdded && !isMaxed;
     return (
         <div className={css["catalog-item-label"]}>
             <div className={css["action-indicators"]}>
                 {isMaxed ? (
-                    <span>{Strings.Max}</span>
+                    <i className="fas fa-check" title={Strings.MaxReached} />
                 ) : (
                     <>
                         <i
                             className={classList(
                                 "fas fa-check",
                                 css["recently-added-indicator"],
-                                showRecentlyAddedIndicator ? undefined : css["hide-indicator"]
+                                recentlyAdded ? undefined : css["hide-indicator"]
                             )}
                             title={lf("Added!")}
                         />
                         <i
-                            className={classList(
-                                "fas fa-plus",
-                                showRecentlyAddedIndicator ? css["hide-indicator"] : undefined
-                            )}
+                            className={classList("fas fa-plus", recentlyAdded ? css["hide-indicator"] : undefined)}
                             title={Strings.AddToChecklist}
                         />
                     </>

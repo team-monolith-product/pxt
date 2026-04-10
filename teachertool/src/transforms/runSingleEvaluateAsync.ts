@@ -13,6 +13,8 @@ import { mergeEvalResult } from "./mergeEvalResult";
 import { setEvalResult } from "./setEvalResult";
 import { setUserFeedback } from "./setUserFeedback";
 import { Strings, Ticks } from "../constants";
+import { SystemParameter } from "../types/criteriaParameters";
+import { validateParameterValue } from "../utils/validateParameterValue";
 
 function generateValidatorPlan(
     criteriaInstance: CriteriaInstance,
@@ -53,8 +55,11 @@ function generateValidatorPlan(
             return undefined;
         }
 
-        if (catalogParam.type === "system" && catalogParam.key) {
-            param.value = getSystemParameter(catalogParam.key, teacherTool);
+        if (catalogParam.type === "system") {
+            const systemParam = catalogParam as SystemParameter;
+            if (systemParam.key) {
+                param.value = getSystemParameter(systemParam.key, teacherTool);
+            }
             if (!param.value) {
                 param.value = catalogParam.default;
             }
@@ -64,6 +69,17 @@ function generateValidatorPlan(
             // User didn't set a value for the parameter.
             if (showErrors) {
                 logError(ErrorCode.evalParameterUnset, "Attempting to evaluate criteria with unset parameter value", {
+                    catalogId: criteriaInstance.catalogCriteriaId,
+                    paramName: param.name,
+                });
+            }
+            return undefined;
+        }
+
+        const validationResult = validateParameterValue(catalogParam, param.value);
+        if (!validationResult.valid) {
+            if (showErrors) {
+                logError(ErrorCode.invalidParameterValue, validationResult.message, {
                     catalogId: criteriaInstance.catalogCriteriaId,
                     paramName: param.name,
                 });
@@ -105,7 +121,7 @@ export async function runSingleEvaluateAsync(criteriaInstanceId: string, fromUse
             return resolve(true);
         }
 
-        setEvalResultOutcome(criteriaInstance.instanceId, EvaluationStatus.InProgress);
+        setEvalResultOutcome(criteriaInstance.instanceId, EvaluationStatus.InProgress, false);
 
         const loadedValidatorPlans = teacherTool.validatorPlans;
         if (!loadedValidatorPlans) {
@@ -138,11 +154,12 @@ export async function runSingleEvaluateAsync(criteriaInstanceId: string, fromUse
                         ? EvaluationStatus.Pass
                         : EvaluationStatus.Fail;
 
-                mergeEvalResult(criteriaInstance.instanceId, result, planResult.notes);
+                mergeEvalResult(criteriaInstance.instanceId, false, result, planResult.notes);
                 return resolve(true); // evaluation completed successfully, so return true (regardless of pass/fail)
             } else {
                 setEvalResult(criteriaInstance.instanceId, {
                     result: EvaluationStatus.NotStarted,
+                    resultIsManual: false,
                     error: planResult?.executionErrorMsg ?? Strings.UnexpectedError,
                 });
                 setUserFeedback(criteriaInstanceId, undefined);
@@ -158,6 +175,7 @@ export async function runSingleEvaluateAsync(criteriaInstanceId: string, fromUse
             setUserFeedback(criteriaInstanceId, undefined);
             setEvalResult(criteriaInstance.instanceId, {
                 result: EvaluationStatus.NotStarted,
+                resultIsManual: false,
                 error: Strings.UnexpectedError,
             });
             return resolve(false);

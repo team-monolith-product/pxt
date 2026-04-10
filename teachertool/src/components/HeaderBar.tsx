@@ -10,11 +10,7 @@ import { showModal } from "../transforms/showModal";
 import * as authClient from "../services/authClient";
 import { classList } from "react-common/components/util";
 
-const betaTag = () => {
-    return <div className={css["beta-tag"]}>{lf("Beta")}</div>;
-};
-
-interface HeaderBarProps {}
+interface HeaderBarProps { }
 
 export const HeaderBar: React.FC<HeaderBarProps> = () => {
     const { state: teacherTool } = useContext(AppStateContext);
@@ -151,8 +147,79 @@ export const HeaderBar: React.FC<HeaderBarProps> = () => {
             <></>
         );
         return (
-            <>
-                <div>
+            <div className={css["user-menu"]}>
+                {teacherTool.userProfile ? (
+                    <MenuDropdown
+                        id="profile-dropdown"
+                        items={items}
+                        label={avatarElem || initialsElem}
+                        title={lf("Profile Settings")}
+                    />
+                ) : (
+                    <Button
+                        className={classList("inverted", css["sign-in-button"])}
+                        rightIcon="xicon cloud-user"
+                        title={lf("Sign In")}
+                        label={lf("Sign In")}
+                        onClick={() => {
+                            pxt.tickEvent(Ticks.UserMenuSignIn);
+                            showModal({ modal: "sign-in" });
+                        }}
+                    />
+                )}
+            </div>
+        );
+    }
+
+    const privacyUrl = pxt?.appTarget?.appTheme?.privacyUrl;
+    const termsOfUseUrl = pxt?.appTarget?.appTheme?.termsOfUseUrl;
+
+    const getSettingItems = () => {
+        const items: MenuItem[] = [];
+
+        if (privacyUrl) {
+            items.push({
+                id: "privacy",
+                title: Strings.Privacy,
+                label: Strings.Privacy,
+                onClick: () => pxt.tickEvent(Ticks.PrivacyStatementClicked),
+                href: privacyUrl,
+            });
+        }
+
+        if (termsOfUseUrl) {
+            items.push({
+                id: "termsOfUse",
+                title: Strings.TermsOfUse,
+                label: Strings.TermsOfUse,
+                onClick: () => pxt.tickEvent(Ticks.TermsOfUseClicked),
+                href: termsOfUseUrl,
+            });
+        }
+
+        return items;
+    };
+
+    const settingItems = getSettingItems();
+
+    return (
+        <MenuBar className={css["header"]} ariaLabel={lf("Header")} role="navigation">
+            <div className={css["left-menu"]}>
+                {getOrganizationLogo()}
+                {getTargetLogo()}
+            </div>
+
+            <div className={css["centered-panel"]}>
+                <div className={classList(css["app-title"], "min-2md")}>
+                    {Strings.AppTitle}
+                </div>
+                <div className={classList(css["app-title"], "min-xs max-2md")}>
+                    {Strings.AppTitleShort}
+                </div>
+            </div>
+
+            <div className={css["right-menu"]}>
+            <div>
                     <Button
                         className={css["feedback-btn"]}
                         labelClassName="min-sm"
@@ -165,50 +232,13 @@ export const HeaderBar: React.FC<HeaderBarProps> = () => {
                         href="https://aka.ms/teachertool-feedback"
                     />
                 </div>
-                <div className={css["user-menu"]}>
-                    {teacherTool.userProfile ? (
-                        <MenuDropdown
-                            id="profile-dropdown"
-                            items={items}
-                            label={avatarElem || initialsElem}
-                            title={lf("Profile Settings")}
-                        />
-                    ) : (
-                        <Button
-                            className={classList("inverted", css["sign-in-button"])}
-                            rightIcon="xicon cloud-user"
-                            title={lf("Sign In")}
-                            label={lf("Sign In")}
-                            onClick={() => {
-                                pxt.tickEvent(Ticks.UserMenuSignIn);
-                                showModal({ modal: "sign-in" });
-                            }}
-                        />
-                    )}
-                </div>
-            </>
-        );
-    }
-
-    return (
-        <MenuBar className={css["header"]} ariaLabel={lf("Header")} role="navigation">
-            <div className={css["left-menu"]}>
-                {getOrganizationLogo()}
-                {getTargetLogo()}
+                <MenuDropdown
+                    id="settings-dropdown"
+                    items={settingItems}
+                    icon="fas fa-cog large"
+                    title={lf("Settings")} />
+                {getUserMenu()}
             </div>
-
-            <div className={css["centered-panel"]}>
-                <div className={classList(css["app-title"], "min-2md")}>
-                    {Strings.AppTitle}
-                    {betaTag()}
-                </div>
-                <div className={classList(css["app-title"], "min-xs max-2md")}>
-                    {Strings.AppTitleShort}
-                    {betaTag()}
-                </div>
-            </div>
-
-            <div className={css["right-menu"]}>{getUserMenu()}</div>
         </MenuBar>
     );
 };

@@ -5,6 +5,7 @@ import { Checklist } from "../types/checklist";
 import { stateAndDispatch } from "./appStateContext";
 import { AppState } from "./state";
 import { Strings } from "../constants";
+import { CriteriaParameter } from "../types/criteriaParameters";
 
 export function getCatalogCriteriaWithId(id: string): CatalogCriteria | undefined {
     const { state } = stateAndDispatch();
@@ -13,6 +14,11 @@ export function getCatalogCriteriaWithId(id: string): CatalogCriteria | undefine
 
 export function getCriteriaInstanceWithId(state: AppState, id: string): CriteriaInstance | undefined {
     return state.checklist.criteria.find(c => c.instanceId === id);
+}
+
+export function getParameterDefinition(catalogCriteriaId: string, paramName: string): CriteriaParameter | undefined {
+    const catalogCriteria = getCatalogCriteriaWithId(catalogCriteriaId);
+    return catalogCriteria?.params?.find(p => p.name === paramName);
 }
 
 export function getParameterValue(state: AppState, instanceId: string, paramName: string): string | undefined {
@@ -62,7 +68,7 @@ export function isProjectLoaded(state: AppState): boolean {
 }
 
 export function isChecklistLoaded(state: AppState): boolean {
-    return !!(state.checklist.criteria.length || state.checklist.name);
+    return !!state.checklist.criteria.length;
 }
 
 export function getSafeProjectName(state: AppState): string | undefined {

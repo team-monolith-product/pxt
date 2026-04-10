@@ -204,6 +204,7 @@ namespace ts.pxtc {
                 pkg,
                 pkgs,
                 extendsTypes,
+                isStatic: decl.modifiers?.some(m => m.kind === SyntaxKind.StaticKeyword),
                 retType:
                     stmt.kind == SyntaxKind.Constructor ? "void" :
                         kind == SymbolKind.Module ? "" :
@@ -335,8 +336,6 @@ namespace ts.pxtc {
             }
             if (si.attributes.jsDoc)
                 jsdocStrings[si.qName] = si.attributes.jsDoc;
-            if (si.attributes.block)
-                locStrings[`${si.qName}|block`] = si.attributes.block;
             if (si.attributes.group)
                 locStrings[`{id:group}${si.attributes.group}`] = si.attributes.group;
             if (si.attributes.subcategory)
@@ -345,6 +344,16 @@ namespace ts.pxtc {
                 si.parameters.filter(pi => !!pi.description).forEach(pi => {
                     jsdocStrings[`${si.qName}|param|${pi.name}`] = pi.description;
                 })
+
+            if (si.attributes.block) {
+                locStrings[`${si.qName}|block`] = si.attributes.block;
+                const comp = pxt.blocks.compileInfo(si);
+                if (comp.handlerArgs?.length) {
+                    for (const arg of comp.handlerArgs) {
+                        locStrings[arg.localizationKey] = arg.name;
+                    }
+                }
+            }
         }
         const mapLocs = (m: pxt.Map<string>, name: string) => {
             if (!options.locs) return;
@@ -451,7 +460,7 @@ namespace ts.pxtc {
 
             if (isExported(stmt as Declaration)) {
                 if (!stmt.symbol) {
-                    console.warn("no symbol", stmt)
+                    pxt.warn("no symbol", stmt)
                     return;
                 }
                 let qName = getFullName(typechecker, stmt.symbol)
@@ -685,9 +694,9 @@ namespace ts.pxtc.service {
         getNewLine() { return "\n" }
         getCurrentDirectory(): string { return "." }
         getDefaultLibFileName(options: CompilerOptions): string { return "no-default-lib.d.ts" }
-        log(s: string): void { console.log("LOG", s) }
-        trace(s: string): void { console.log("TRACE", s) }
-        error(s: string): void { console.error("ERROR", s) }
+        log(s: string): void { pxt.log("LOG", s) }
+        trace(s: string): void { pxt.log("TRACE", s) }
+        error(s: string): void { pxt.error("ERROR", s) }
         useCaseSensitiveFileNames(): boolean { return true }
 
         // resolveModuleNames?(moduleNames: string[], containingFile: string): ResolvedModule[];
@@ -978,7 +987,7 @@ namespace ts.pxtc.service {
             let res = runConversionsAndCompileUsingService();
             timesToMs(res);
             if (host.opts.target.switches.time)
-                console.log("DIAG-TIME", res.times)
+                pxt.log("DIAG-TIME", res.times)
             return res
         },
 
@@ -1064,7 +1073,24 @@ namespace ts.pxtc.service {
             };
 
             // Fill default parameters in block string
-            const computeBlockString = (symbol: SymbolInfo): string => {
+            const computeBlockString = (symbol: SymbolInfo, skipParent = false, paramMap?: pxt.Map<string>): string => {
+                const toolboxParent = symbol.attributes?.toolboxParent || symbol.attributes?.duplicateWithToolboxParent;
+                const toolboxArgument = symbol.attributes?.toolboxParentArgument || symbol.attributes?.duplicateWithToolboxParentArgument;
+
+                if (toolboxParent && !skipParent) {
+                    const parentSymbol = blockInfo.blocksById[toolboxParent];
+
+                    if (parentSymbol) {
+                        const childString = computeBlockString(symbol, true);
+
+                        const paramMap = {
+                            [toolboxArgument || "*"]: childString
+                        };
+
+                        return computeBlockString(parentSymbol, true, paramMap);
+                    }
+                }
+
                 if (symbol.attributes?._def) {
                     let block = [];
                     const blockDef = symbol.attributes._def;
@@ -1079,10 +1105,21 @@ namespace ts.pxtc.service {
                             case "param":
                                 // In order, preference default value, var name, param name, blockdef param name
                                 let actualParam = compileInfo.definitionNameToParam[part.name];
-                                block.push(actualParam?.defaultValue
+
+                                let valueString = actualParam?.defaultValue
                                     || part.varName
                                     || actualParam?.actualName
-                                    || part.name);
+                                    || part.name;
+
+                                if (paramMap?.["*"]) {
+                                    valueString = paramMap["*"];
+                                    delete paramMap["*"];
+                                }
+                                else if (paramMap?.[actualParam.definitionName]) {
+                                    valueString = paramMap[actualParam.definitionName];
+                                }
+
+                                block.push(valueString);
                                 break;
                         }
                     }
@@ -1257,6 +1294,7 @@ namespace ts.pxtc.service {
         host.opts.fileSystem = prevFS
         for (let k of Object.keys(newFS))
             host.setFile(k, newFS[k]) // update version numbers
+        res.fileSystem = U.flatClone(newFS)
         if (res.diagnostics.length == 0) {
             host.opts.skipPxtModulesEmit = false
             host.opts.skipPxtModulesTSC = false
@@ -1274,6 +1312,7 @@ namespace ts.pxtc.service {
             let ts2asm = compile(host.opts, service)
             res = {
                 sourceMap: res.sourceMap,
+                fileSystem: res.fileSystem,
                 ...ts2asm,
             }
             if (res.needsFullRecompile || ((!res.success || res.diagnostics.length) && host.opts.clearIncrBuildAndRetryOnError)) {

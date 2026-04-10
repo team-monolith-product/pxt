@@ -7882,7 +7882,7 @@ var ts;
         return node.kind !== 10 /* JsxText */ ? ts.getLeadingCommentRanges(sourceFileOfNode.text, node.pos) : undefined;
     }
     ts.getLeadingCommentRangesOfNode = getLeadingCommentRangesOfNode;
-    function getJSDocCommentRanges(node, text) {
+    function getJSDocCommentRanges(node, text, compileOptions) {
         var commentRanges = (node.kind === 146 /* Parameter */ ||
             node.kind === 145 /* TypeParameter */ ||
             node.kind === 186 /* FunctionExpression */ ||
@@ -7891,10 +7891,20 @@ var ts;
             ts.concatenate(ts.getTrailingCommentRanges(text, node.pos), ts.getLeadingCommentRanges(text, node.pos)) :
             ts.getLeadingCommentRanges(text, node.pos);
         // True if the comment starts with '/**' but not if it is '/**/'
-        return ts.filter(commentRanges, function (comment) {
-            return text.charCodeAt(comment.pos + 1) === 42 /* asterisk */ &&
+        const isJSDocComment = (comment) => {
+            return (text.charCodeAt(comment.pos + 1) === 42 /* asterisk */ &&
                 text.charCodeAt(comment.pos + 2) === 42 /* asterisk */ &&
-                text.charCodeAt(comment.pos + 3) !== 47 /* slash */;
+                text.charCodeAt(comment.pos + 3) !== 47 /* slash */);
+        };
+        // True if the comment starts with '//%'
+        const isMakeCodeBlockComment = (comment) => {
+            return (text.charCodeAt(comment.pos + 0) === 47 /* slash */ &&
+                text.charCodeAt(comment.pos + 1) === 47 /* slash */ &&
+                text.charCodeAt(comment.pos + 2) === 37 /* percent */);
+        };
+        const emitBlockCommentsAsJsDocs = compileOptions?.emitBlockCommentsAsJsDocs;
+        return ts.filter(commentRanges, function (comment) {
+            return isJSDocComment(comment) || (emitBlockCommentsAsJsDocs && isMakeCodeBlockComment(comment));
         });
     }
     ts.getJSDocCommentRanges = getJSDocCommentRanges;
@@ -13044,10 +13054,10 @@ var ts;
         }
     }
     ts.forEachChild = forEachChild;
-    function createSourceFile(fileName, sourceText, languageVersion, setParentNodes, scriptKind) {
+    function createSourceFile(fileName, sourceText, languageVersion, setParentNodes, scriptKind, options) {
         if (setParentNodes === void 0) { setParentNodes = false; }
         ts.performance.mark("beforeParse");
-        var result = Parser.parseSourceFile(fileName, sourceText, languageVersion, /*syntaxCursor*/ undefined, setParentNodes, scriptKind);
+        var result = Parser.parseSourceFile(fileName, sourceText, languageVersion, /*syntaxCursor*/ undefined, setParentNodes, scriptKind, options);
         ts.performance.mark("afterParse");
         ts.performance.measure("Parse", "beforeParse", "afterParse");
         return result;
@@ -13203,10 +13213,10 @@ var ts;
         // Note: any errors at the end of the file that do not precede a regular node, should get
         // attached to the EOF token.
         var parseErrorBeforeNextFinishedNode = false;
-        function parseSourceFile(fileName, sourceText, languageVersion, syntaxCursor, setParentNodes, scriptKind) {
+        function parseSourceFile(fileName, sourceText, languageVersion, syntaxCursor, setParentNodes, scriptKind, options) {
             scriptKind = ts.ensureScriptKind(fileName, scriptKind);
             initializeState(sourceText, languageVersion, syntaxCursor, scriptKind);
-            var result = parseSourceFileWorker(fileName, languageVersion, setParentNodes, scriptKind);
+            var result = parseSourceFileWorker(fileName, languageVersion, setParentNodes, scriptKind, options);
             clearState();
             return result;
         }
@@ -13248,7 +13258,7 @@ var ts;
             // .tsx and .jsx files are treated as jsx language variant.
             return scriptKind === 4 /* TSX */ || scriptKind === 2 /* JSX */ || scriptKind === 1 /* JS */ || scriptKind === 6 /* JSON */ ? 1 /* JSX */ : 0 /* Standard */;
         }
-        function initializeState(_sourceText, languageVersion, _syntaxCursor, scriptKind) {
+        function initializeState(_sourceText, languageVersion, _syntaxCursor, scriptKind, options) {
             NodeConstructor = ts.objectAllocator.getNodeConstructor();
             TokenConstructor = ts.objectAllocator.getTokenConstructor();
             IdentifierConstructor = ts.objectAllocator.getIdentifierConstructor();
@@ -13279,8 +13289,8 @@ var ts;
             syntaxCursor = undefined;
             sourceText = undefined;
         }
-        function parseSourceFileWorker(fileName, languageVersion, setParentNodes, scriptKind) {
-            sourceFile = createSourceFile(fileName, languageVersion, scriptKind);
+        function parseSourceFileWorker(fileName, languageVersion, setParentNodes, scriptKind, options) {
+            sourceFile = createSourceFile(fileName, languageVersion, scriptKind, options);
             sourceFile.flags = contextFlags;
             // Prime the scanner.
             nextToken();
@@ -13299,11 +13309,11 @@ var ts;
             return sourceFile;
         }
         function addJSDocComment(node) {
-            var comments = ts.getJSDocCommentRanges(node, sourceFile.text);
+            var comments = ts.getJSDocCommentRanges(node, sourceFile.text, sourceFile.compileOptions);
             if (comments) {
                 for (var _i = 0, comments_2 = comments; _i < comments_2.length; _i++) {
                     var comment = comments_2[_i];
-                    var jsDoc = JSDocParser.parseJSDocComment(node, comment.pos, comment.end - comment.pos);
+                    var jsDoc = JSDocParser.parseJSDocComment(node, comment.pos, comment.end - comment.pos, sourceFile.compileOptions);
                     if (!jsDoc) {
                         continue;
                     }
@@ -13345,7 +13355,7 @@ var ts;
             }
         }
         Parser.fixupParentReferences = fixupParentReferences;
-        function createSourceFile(fileName, languageVersion, scriptKind) {
+        function createSourceFile(fileName, languageVersion, scriptKind, options) {
             // code from createNode is inlined here so createNode won't have to deal with special case of creating source files
             // this is quite rare comparing to other nodes and createNode should be as fast as possible
             var sourceFile = new SourceFileConstructor(265 /* SourceFile */, /*pos*/ 0, /* end */ sourceText.length);
@@ -13357,6 +13367,7 @@ var ts;
             sourceFile.languageVariant = getLanguageVariant(scriptKind);
             sourceFile.isDeclarationFile = ts.fileExtensionIs(sourceFile.fileName, ".d.ts" /* Dts */);
             sourceFile.scriptKind = scriptKind;
+            sourceFile.compileOptions = options;
             return sourceFile;
         }
         function setContextFlag(val, flag) {
@@ -18069,11 +18080,11 @@ var ts;
                 return jsDoc ? { jsDoc: jsDoc, diagnostics: diagnostics } : undefined;
             }
             JSDocParser.parseIsolatedJSDocComment = parseIsolatedJSDocComment;
-            function parseJSDocComment(parent, start, length) {
+            function parseJSDocComment(parent, start, length, compileOptions) {
                 var saveToken = currentToken;
                 var saveParseDiagnosticsLength = parseDiagnostics.length;
                 var saveParseErrorBeforeNextFinishedNode = parseErrorBeforeNextFinishedNode;
-                var comment = parseJSDocCommentWorker(start, length);
+                var comment = parseJSDocCommentWorker(start, length, compileOptions);
                 if (comment) {
                     comment.parent = parent;
                 }
@@ -18101,7 +18112,7 @@ var ts;
                 PropertyLikeParse[PropertyLikeParse["Property"] = 0] = "Property";
                 PropertyLikeParse[PropertyLikeParse["Parameter"] = 1] = "Parameter";
             })(PropertyLikeParse || (PropertyLikeParse = {}));
-            function parseJSDocCommentWorker(start, length) {
+            function parseJSDocCommentWorker(start, length, compileOptions) {
                 var content = sourceText;
                 start = start || 0;
                 var end = length === undefined ? content.length : start + length;
@@ -18114,6 +18125,19 @@ var ts;
                 var tagsEnd;
                 var comments = [];
                 var result;
+                if (compileOptions?.emitBlockCommentsAsJsDocs && isMakeCodeBlockCommentStart(content, start)) {
+                    // Return the entire line
+                    scanner.scanRange(start, length, function () {
+                        while (!(token() === 1 /* EndOfFileToken */ || token() === 4 /* EndOfLineTrivia */)) {
+                            comments.push(scanner.getTokenText());
+                            nextJSDocToken();
+                        }
+                        removeLeadingNewlines(comments);
+                        removeTrailingNewlines(comments);
+                        result = createMakeCodeBlockComment();
+                    });
+                    return result;
+                }
                 // Check for /** (JSDoc opening part)
                 if (!isJsDocStart(content, start)) {
                     return result;
@@ -18233,7 +18257,18 @@ var ts;
                         content.charCodeAt(start + 2) === 42 /* asterisk */ &&
                         content.charCodeAt(start + 3) !== 42 /* asterisk */;
                 }
+                function isMakeCodeBlockCommentStart(content, start) {
+                    return content.charCodeAt(start) == 47 /* slash */ &&
+                        content.charCodeAt(start + 1) == 47 /* slash */ &&
+                        content.charCodeAt(start + 2) == 37 /* percent */;
+                }
                 function createJSDocComment() {
+                    var result = createNode(275 /* JSDocComment */, start);
+                    result.tags = tags && createNodeArray(tags, tagsPos, tagsEnd);
+                    result.comment = comments.length ? comments.join("") : undefined;
+                    return finishNode(result, end);
+                }
+                function createMakeCodeBlockComment() {
                     var result = createNode(275 /* JSDocComment */, start);
                     result.tags = tags && createNodeArray(tags, tagsPos, tagsEnd);
                     result.comment = comments.length ? comments.join("") : undefined;
@@ -66774,7 +66809,7 @@ var ts;
         }
         function writeJsDocComments(declaration) {
             if (declaration) {
-                var jsDocComments = ts.getJSDocCommentRanges(declaration, currentText);
+                var jsDocComments = ts.getJSDocCommentRanges(declaration, currentText, compilerOptions);
                 ts.emitNewLineBeforeLeadingComments(currentLineMap, writer, declaration, jsDocComments);
                 // jsDoc comments are emitted at /*leading comment1 */space/*leading comment*/space
                 ts.emitComments(currentText, currentLineMap, writer, jsDocComments, /*leadingSeparator*/ false, /*trailingSeparator*/ true, newLine, ts.writeCommentRange);

@@ -13,7 +13,7 @@ import Cloud = pxt.Cloud;
 import Util = pxt.Util;
 import { TimeMachine } from "./timeMachine";
 import { fireClickOnEnter } from "./util";
-import { pairAsync } from "./cmds";
+import { pairDialogAsync } from "./cmds";
 import { invalidate } from "./data";
 
 import IProjectView = pxt.editor.IProjectView;
@@ -688,7 +688,7 @@ export function showReportAbuseAsync(pubId?: string) {
             </div>
             <div className="ui field">
                 <label id="abuseDescriptionLabel">{lf("Why do you find it offensive?")}</label>
-                <textarea aria-labelledby="abuseDescriptionLabel"></textarea>
+                <textarea aria-labelledby="abuseDescriptionLabel" maxLength={1000}></textarea>
             </div>
         </div>,
     }).then(res => {
@@ -752,8 +752,8 @@ export function renderBrowserDownloadInstructions(saveonly?: boolean, redeploy?:
 
     const onPairClicked = async () => {
         core.hideDialog();
-        const successfulPairing = await pairAsync(true);
-        if (redeploy && successfulPairing)
+        const pairingStatus = await pairDialogAsync();
+        if (redeploy && pairingStatus === pxt.commands.WebUSBPairResult.Success)
             await redeploy();
     }
 
@@ -790,7 +790,7 @@ export function renderBrowserDownloadInstructions(saveonly?: boolean, redeploy?:
                                                     </div>
                                                     <div className="thirteen wide column">
                                                         {lf("Download your code faster by pairing with WebUSB!")}
-                                                        <a className="ui button purple" onClick={onPairClicked}>{lf("Pair Now")}</a>
+                                                        <sui.Button className="ui button purple" onClick={onPairClicked} text={lf("Pair Now")} />
                                                     </div>
                                                 </div>
                                             </div>
