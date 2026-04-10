@@ -34,6 +34,7 @@ export class CoreDialog extends React.Component<core.PromptOptions, CoreDialogSt
         this.handleInputChange = this.handleInputChange.bind(this);
         this.handleConfirmationTextChange = this.handleConfirmationTextChange.bind(this);
         this.handleConfirmationCheckboxChange = this.handleConfirmationCheckboxChange.bind(this);
+        if (props.forceUpdate) props.forceUpdate(() => this.forceUpdate());
     }
 
     hide() {
@@ -103,9 +104,14 @@ export class CoreDialog extends React.Component<core.PromptOptions, CoreDialogSt
         const options = this.props;
         const { inputValue, inputError } = this.state;
         const size = options.size === undefined ? 'small' : options.size;
-        const isEscapable = options.hasCloseIcon || !options.hideCancel;
+        const isEscapable = !options.nonEscapable && (options.hasCloseIcon || !options.hideCancel);
 
-        const buttons = options.buttons ? options.buttons.filter(b => !!b) : [];
+        const buttons = options.buttonsFn
+            ? options.buttonsFn().filter(b => !!b)
+            : options.buttons
+                ? options.buttons.filter(b => !!b)
+                : [];
+
         buttons.forEach(btn => {
             const onclick = btn.onclick;
             btn.onclick = () => {
@@ -145,6 +151,7 @@ export class CoreDialog extends React.Component<core.PromptOptions, CoreDialogSt
                 defaultOpen={true} buttons={buttons}
                 dimmer={true} closeIcon={options.hasCloseIcon}
                 header={options.header}
+                headerFn={options.headerFn}
                 headerIcon={options.headerIcon}
                 closeOnDimmerClick={isEscapable}
                 closeOnDocumentClick={isEscapable}
@@ -174,7 +181,8 @@ export class CoreDialog extends React.Component<core.PromptOptions, CoreDialogSt
                     <>
                         <p>Type '{options.confirmationText}' to confirm:</p>
                         <sui.Input ref="confirmationInput" id="confirmationInput"
-                            ariaLabel={lf("Type your name to confirm")} autoComplete={false}
+                            label={lf("Type your name to confirm")} visuallyHiddenLabel
+                            autoComplete={false}
                             value={this.state.confirmationText || ''} onChange={this.handleConfirmationTextChange}
                             selectOnMount={!mobile} autoFocus={!mobile} />
                     </>
@@ -280,7 +288,7 @@ export class LoadingDimmer extends React.Component<LoadingDimmerProps, LoadingDi
         return <sui.Dimmer isOpen={true} active={visible} closable={false}>
             <sui.Loader className={`large main msg no-select ${hc ? "hc" : ""}`} aria-live="assertive">
                 {content}
-                {loadedPercentage !== undefined && <ProgressBar value={loadedPercentage} />}
+                {loadedPercentage !== undefined && <ProgressBar value={100 * loadedPercentage} />}
             </sui.Loader>
         </sui.Dimmer>;
     }

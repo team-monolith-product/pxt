@@ -4,6 +4,7 @@ import { registerWorkspaceItems } from "./workspaceItems";
 import { onWorkspaceContextMenu } from "../external";
 import { registerBlockitems } from "./blockItems";
 
+let shortcutsInitialized = false;
 export function initContextMenu() {
     const msg = Blockly.Msg;
 
@@ -23,18 +24,20 @@ export function initContextMenu() {
     msg.DELETE_ALL_BLOCKS = lf("Delete All Blocks");
     msg.HELP = lf("Help");
 
+    if (shortcutsInitialized) return;
+    shortcutsInitialized = true;
     registerWorkspaceItems();
     registerBlockitems();
 }
 
 export function setupWorkspaceContextMenu(workspace: Blockly.WorkspaceSvg) {
-    Blockly.ContextMenuItems.registerCommentOptions();
+    try {
+        Blockly.ContextMenuItems.registerCommentOptions();
+    }
+    catch (e) {
+        // will throw if already registered. ignore
+    }
     workspace.configureContextMenu = (options, e) => {
-        if (workspace.options.comments && !workspace.options.readOnly) {
-            // options.unshift(Blockly.ContextMenu.workspaceCommentOption(workspace, e))
-
-        }
-
         onWorkspaceContextMenu(workspace, options);
     };
 }

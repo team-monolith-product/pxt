@@ -3,7 +3,7 @@
 import * as Blockly from "blockly";
 import { FieldImageDropdownOptions } from "./field_imagedropdown";
 import { FieldImages } from "./field_images";
-import { FieldCustom, getAllReferencedTiles, bitmapToImageURI, needsTilemapUpgrade } from "./field_utils";
+import { FieldCustom, getAllReferencedTiles, bitmapToImageURI, needsTilemapUpgrade, getAssetSaveState, loadAssetFromSaveState } from "./field_utils";
 
 export interface ImageJSON {
     src: string;
@@ -21,17 +21,24 @@ export class FieldTileset extends FieldImages implements FieldCustom {
     protected selectedOption_: TilesetDropdownOption;
 
     protected static referencedTiles: TilesetDropdownOption[];
-    protected static cachedRevision: number;
-    protected static cachedWorkspaceId: string;
+    protected static cachedPalette: string;
+    protected static cachedRevision = -1;
+    protected static bitmapCache: Map<string, string> = new Map();
 
     protected static getReferencedTiles(workspace: Blockly.Workspace) {
         const project = pxt.react.getTilemapProject();
+        const paletteKey = pxt.appTarget.runtime.palette ? pxt.appTarget.runtime.palette.join("") : undefined;
 
-        if (project.revision() !== FieldTileset.cachedRevision || workspace.id != FieldTileset.cachedWorkspaceId) {
+        if (paletteKey !== FieldTileset.cachedPalette) {
+            this.bitmapCache.clear();
+            this.cachedPalette = paletteKey;
+            this.cachedRevision = -1;
+        }
+
+        if (FieldTileset.cachedRevision !== project.revision()) {
             FieldTileset.cachedRevision = project.revision();
-            FieldTileset.cachedWorkspaceId = workspace.id;
-            const references = getAllReferencedTiles(workspace);
 
+            const references = getAllReferencedTiles(workspace);
             const supportedTileWidths = [16, 4, 8, 32];
 
             for (const width of supportedTileWidths) {
@@ -63,18 +70,29 @@ export class FieldTileset extends FieldImages implements FieldCustom {
                     (weights[b.id] || (weights[b.id] = tileWeight(b.id)))
             });
 
-            const getTileImage = (t: pxt.Tile) => tileWeight(t.id) <= 2 ?
-                mkTransparentTileImage(t.bitmap.width) :
-                bitmapToImageURI(pxt.sprite.Bitmap.fromData(t.bitmap), PREVIEW_SIDE_LENGTH, false);
-
             FieldTileset.referencedTiles = references.map(tile => [{
-                src: getTileImage(tile),
+                src: FieldTileset.getTileImage(tile),
                 width: PREVIEW_SIDE_LENGTH,
                 height: PREVIEW_SIDE_LENGTH,
-                alt: displayName(tile)
+                alt: displayName(tile) || tile.id
             }, tile.id, tile])
         }
+
         return FieldTileset.referencedTiles;
+    }
+
+
+    static getTileImage(t: pxt.Tile) {
+        const key = pxt.U.toHex(t.bitmap.data) + "-" + t.bitmap.width + "-" + t.bitmap.height;
+        if (!this.bitmapCache.has(key)) {
+            if (tileWeight(t.id) <= 2) {
+                this.bitmapCache.set(key, mkTransparentTileImage(t.bitmap.width));
+            }
+            else {
+                this.bitmapCache.set(key, bitmapToImageURI(pxt.sprite.Bitmap.fromData(t.bitmap), PREVIEW_SIDE_LENGTH, false))
+            }
+        }
+        return this.bitmapCache.get(key);
     }
 
     public isFieldCustom_ = true;
@@ -96,9 +114,10 @@ export class FieldTileset extends FieldImages implements FieldCustom {
     }
 
     getValue() {
+        const project = pxt.react.getTilemapProject();
         if (this.selectedOption_) {
             let tile = this.selectedOption_[2];
-            tile = pxt.react.getTilemapProject().lookupAsset(tile.type, tile.id);
+            tile = project.lookupAsset(tile.type, tile.id);
 
             if (!tile) {
                 // This shouldn't happen
@@ -109,12 +128,23 @@ export class FieldTileset extends FieldImages implements FieldCustom {
         }
         const v = super.getValue();
 
-        // If the user decompiled from JavaScript, then they might have passed an image literal
-        // instead of the qualified name of a tile. The decompiler strips out the "img" part
-        // so we need to add it back
-        if (typeof v === "string" && v.indexOf(".") === -1 && v.indexOf(`\``) === -1) {
-            return `img\`${v}\``
+        if (typeof v === "string") {
+            if (v.indexOf(".") !== -1) {
+                // Possibly a qualified name like myTiles.tile1
+                const tile = project.lookupAsset(pxt.AssetType.Tile, v);
+                if (tile) {
+                    return pxt.getTSReferenceForAsset(tile);
+                }
+            }
+
+            // If not a qualified name, it's either an image literal or an asset reference like assets.tile`name`
+            if (v.indexOf(`\``) === -1) {
+                // If the user decompiled from JavaScript, the decompiler strips out the "img" part
+                // so we need to add it back
+                return `img\`${v}\``
+            }
         }
+
         return v;
     }
 
@@ -131,14 +161,13 @@ export class FieldTileset extends FieldImages implements FieldCustom {
         if (this.value_ && this.selectedOption_) {
             if (this.selectedOption_[1] !== this.value_) {
                 const tile = pxt.react.getTilemapProject().resolveTile(this.value_);
-                FieldTileset.cachedRevision = -1;
 
                 if (tile) {
                     this.selectedOption_ = [{
                         src: bitmapToImageURI(pxt.sprite.Bitmap.fromData(tile.bitmap), PREVIEW_SIDE_LENGTH, false),
                         width: PREVIEW_SIDE_LENGTH,
                         height: PREVIEW_SIDE_LENGTH,
-                        alt: displayName(tile)
+                        alt: displayName(tile) || tile.id
                     }, this.value_, tile]
                 }
             }
@@ -193,23 +222,32 @@ export class FieldTileset extends FieldImages implements FieldCustom {
             if (newValue) {
                 const project = pxt.react.getTilemapProject();
                 const match = /^\s*assets\s*\.\s*tile\s*`([^`]*)`\s*$/.exec(newValue);
+                let tile: pxt.Tile;
 
                 if (match) {
-                    const tile = project.lookupAssetByName(pxt.AssetType.Tile, match[1]);
+                    tile = project.lookupAssetByName(pxt.AssetType.Tile, match[1]);
+                }
+                else if (newValue.startsWith(pxt.sprite.TILE_NAMESPACE)) {
+                    tile = project.lookupAsset(pxt.AssetType.Tile, newValue.trim());
+                }
+                else {
+                    tile = project.lookupAssetByName(pxt.AssetType.Tile, newValue.trim());
+                }
 
-                    if (tile) {
-                        this.localTile = tile;
-                        return newValue;
-                    }
+                if (tile) {
+                    this.localTile = tile;
+                    return pxt.getTSReferenceForAsset(tile, false);
                 }
             }
 
             if (this.sourceBlock_) {
-                console.warn(`Trying to set tile reference to nonexistent tile. Block type: ${this.sourceBlock_.type}, Field name: ${this.name}, Value: ${newValue}`)
+                pxt.warn(`Trying to set tile reference to nonexistent tile. Block type: ${this.sourceBlock_.type}, Field name: ${this.name}, Value: ${newValue}`)
             }
 
             return null;
         }
+
+        this.localTile = undefined;
 
         return newValue;
     }
@@ -225,7 +263,7 @@ export class FieldTileset extends FieldImages implements FieldCustom {
                         src: bitmapToImageURI(pxt.sprite.Bitmap.fromData(this.localTile.bitmap), PREVIEW_SIDE_LENGTH, false),
                         width: PREVIEW_SIDE_LENGTH,
                         height: PREVIEW_SIDE_LENGTH,
-                        alt: displayName(this.localTile)
+                        alt: displayName(this.localTile) || this.localTile.id
                     },
                     this.localTile.id,
                     this.localTile
@@ -251,6 +289,12 @@ export class FieldTileset extends FieldImages implements FieldCustom {
     }
 
     protected updateAssetListener() {
+        if (!this.assetChangeListener) {
+            this.assetChangeListener = () => {
+                this.doValueUpdate_(this.getValue());
+                this.forceRerender();
+            };
+        }
         const project = pxt.react.getTilemapProject();
         project.removeChangeListener(pxt.AssetType.Tile, this.assetChangeListener);
         if (this.selectedOption_) {
@@ -258,9 +302,43 @@ export class FieldTileset extends FieldImages implements FieldCustom {
         }
     }
 
-    protected assetChangeListener = () => {
-       this.doValueUpdate_(this.getValue());
-       this.forceRerender();
+    protected assetChangeListener: () => void;
+
+    saveState(_doFullSerialization?: boolean) {
+        let asset = this.localTile || this.selectedOption_?.[2];
+        const project = pxt.react.getTilemapProject();
+
+        if (!asset) {
+            const value = this.getValue();
+
+            const parsedTsReference = pxt.parseAssetTSReference(value);
+            if (parsedTsReference) {
+                asset = project.lookupAssetByName(pxt.AssetType.Tile, parsedTsReference.name);
+            }
+
+            if (!asset) {
+                asset = project.lookupAsset(pxt.AssetType.Tile, value);
+            }
+        }
+        if (asset?.isProjectTile) {
+            return getAssetSaveState(asset)
+        }
+        return super.saveState(_doFullSerialization);
+    }
+
+    loadState(state: any) {
+        if (typeof state === "string") {
+            super.loadState(state);
+            return;
+        }
+
+        const asset = loadAssetFromSaveState(state);
+        this.localTile = asset as pxt.Tile;
+        super.loadState(pxt.getTSReferenceForAsset(asset));
+    }
+
+    getFieldDescription(): string {
+        return lf("tile");
     }
 }
 

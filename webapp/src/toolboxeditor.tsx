@@ -1,7 +1,9 @@
 
+import * as ReactDOM from "react-dom";
 import * as srceditor from "./srceditor";
 import * as toolbox from "./toolbox";
 import * as compiler from "./compiler";
+import { getProjectToolboxFilters } from "./package";
 
 export abstract class ToolboxEditor extends srceditor.Editor {
 
@@ -17,11 +19,32 @@ export abstract class ToolboxEditor extends srceditor.Editor {
     abstract getBlocksForCategory(ns: string, subns?: string): toolbox.BlockDefinition[];
 
     protected shouldShowBlock(blockId: string, ns: string, shadow?: boolean) {
-        const filters = this.parent.state.editorState && this.parent.state.editorState.filters;
+        let filters = this.parent.state.editorState && this.parent.state.editorState.filters;
+
+        const projectFilter = getProjectToolboxFilters();
+
+        if (projectFilter) {
+            if (filters) {
+                // tutorial filters override project filters
+                pxt.U.jsonMergeFrom(projectFilter, filters);
+            }
+
+            filters = projectFilter;
+        }
+
+
         if (filters) {
-            // block-level filters should not apply to shadow blocks (nested)
-            const blockFilter = filters.blocks && (filters.blocks[blockId] || (this.blockIdMap && this.blockIdMap[blockId]?.some(id => filters.blocks[id])));
+            let blockFilter: pxt.editor.FilterState | boolean;
+            if (filters.blocks) {
+                if (filters.blocks[blockId] !== undefined) {
+                    blockFilter = filters.blocks[blockId];
+                }
+                else {
+                    blockFilter = this.blockIdMap && this.blockIdMap[blockId]?.some(id => filters.blocks[id]);
+                }
+            }
             const categoryFilter = filters.namespaces && filters.namespaces[ns];
+            // block-level filters should not apply to shadow blocks (nested)
             // First try block filters
             if (blockFilter != undefined && blockFilter == pxt.editor.FilterState.Hidden && !shadow) return false;
             if (blockFilter != undefined) return true;
@@ -35,23 +58,36 @@ export abstract class ToolboxEditor extends srceditor.Editor {
     }
 
     protected shouldShowCustomCategory(ns: string) {
-        const filters = this.parent.state.editorState && this.parent.state.editorState.filters;
+        let filters = this.parent.state.editorState && this.parent.state.editorState.filters;
+        const hasTutorialFilters = !!(filters);
+
+        const projectFilter = getProjectToolboxFilters();
+
+        if (projectFilter) {
+            if (filters) {
+                // tutorial filters override project filters
+                pxt.U.jsonMergeFrom(projectFilter, filters);
+            }
+
+            filters = projectFilter;
+        }
+
         if (filters) {
             // These categories are special and won't have any children so we need to check the filters manually
             if (ns === "variables" && (!filters.blocks ||
                 filters.blocks["variables_set"] ||
                 filters.blocks["variables_get"] ||
                 filters.blocks["variables_change"]) &&
-                (!filters.namespaces || filters.namespaces["variables"] !== pxt.editor.FilterState.Disabled)) {
+                (!filters.namespaces || !shouldHideCategory("variables", filters.namespaces))) {
                 return true;
             } else if (ns === "functions" && (!filters.blocks ||
                 filters.blocks["function_definition"] ||
                 filters.blocks["function_call"] ||
                 filters.blocks["procedures_defnoreturn"] ||
                 filters.blocks["procedures_callnoreturn"]) &&
-                (!filters.namespaces || filters.namespaces["functions"] !== pxt.editor.FilterState.Disabled)) {
+                (!filters.namespaces || !shouldHideCategory("functions", filters.namespaces))) {
                 return true;
-            } else {
+            } else if (hasTutorialFilters) {
                 return false;
             }
         }
@@ -112,6 +148,29 @@ export abstract class ToolboxEditor extends srceditor.Editor {
 
     public getAllCategories() {
         return this.getToolboxCategories(false).concat(this.getToolboxCategories(true));
+    }
+
+    protected getAllBlocks(): toolbox.BlockDefinition[] {
+        const allCategories = this.getAllCategories();
+        let allBlocks: toolbox.BlockDefinition[] = [];
+        allCategories.forEach(category => {
+            const blocks = category.blocks;
+            allBlocks = allBlocks.concat(blocks);
+            if (category.subcategories) category.subcategories.forEach(subcategory => {
+                const subblocks = subcategory.blocks;
+                allBlocks = allBlocks.concat(subblocks);
+            })
+        });
+        return allBlocks;
+    }
+
+    // Injects a style element that allows the tutorial engine to render blocks
+    // and associate them with their categories, even if the toolbox itself is not present.
+    protected injectCategoryStyles() {
+        const allCategories = this.getAllCategories();
+        let container = document.createElement("div");
+        ReactDOM.render(<toolbox.ToolboxStyle categories={allCategories} />, container);
+        document.getElementById('editorcontent').appendChild(container);
     }
 
     public getToolboxCategories(isAdvanced?: boolean) {
@@ -226,6 +285,7 @@ export abstract class ToolboxEditor extends srceditor.Editor {
 
     abstract showFlyout(treeRow: toolbox.ToolboxCategory): void;
     abstract hideFlyout(): void;
+    abstract setFlyoutForceOpen(forceOpen: boolean): void;
     moveFocusToFlyout() { }
 
     protected abstract showFlyoutHeadingLabel(ns: string, name: string, subns: string, icon: string, color: string): void;
@@ -363,9 +423,10 @@ export abstract class ToolboxEditor extends srceditor.Editor {
         return this.blockGroupsCache[ns];
     }
 
-    override focusToolbox(itemToFocus?: string) {
-        if (this.toolbox) {
-            this.toolbox.focus(itemToFocus);
-        }
-    }
+    onToolboxBlur(e: React.FocusEvent, keepFlyoutOpen: boolean) {};
+}
+
+
+function shouldHideCategory(category: string, filters: {[index: string]: pxt.editor.FilterState}): boolean {
+    return filters[category] == pxt.editor.FilterState.Hidden || filters[category] == pxt.editor.FilterState.Disabled;
 }

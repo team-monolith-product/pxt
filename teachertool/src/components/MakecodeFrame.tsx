@@ -6,7 +6,7 @@ import { setEditorRef } from "../services/makecodeEditorService";
 import { AppStateContext } from "../state/appStateContext";
 import { getEditorUrl } from "../utils";
 import { classList } from "react-common/components/util";
-import { logDebug } from "../services/loggingService";
+import { MakeCodeFramePlaceholder } from "./MakecodeFramePlaceholder";
 
 interface IProps {}
 
@@ -18,8 +18,12 @@ export const MakeCodeFrame: React.FC<IProps> = () => {
 
     useEffect(() => {
         const newUrl = createIFrameUrl(teacherTool.projectMetadata?.id || "");
-        setFrameUrl(newUrl);
-    }, [frameId, teacherTool.projectMetadata?.id]);
+        if (frameUrl == newUrl) {
+            forceIFrameReload();
+        } else {
+            setFrameUrl(newUrl);
+        }
+    }, [frameId, teacherTool.projectMetadata?.id, teacherTool.projectReloadCounter]);
 
     function createIFrameUrl(shareId: string): string {
         const editorUrl: string = pxt.BrowserUtils.isLocalHost()
@@ -57,14 +61,18 @@ export const MakeCodeFrame: React.FC<IProps> = () => {
     }
 
     /* eslint-disable @microsoft/sdl/react-iframe-missing-sandbox */
+    const frameVisible = !!teacherTool.projectMetadata?.id;
     return (
-        <iframe
-            id="code-eval-project-view-frame"
-            className={classList(css["makecode-frame"], teacherTool.projectMetadata?.id ? undefined : css["invisible"])}
-            src={frameUrl}
-            title={"title"}
-            ref={handleIFrameRef}
-        />
+        <>
+            <iframe
+                id="code-eval-project-view-frame"
+                className={classList(css["makecode-frame"], frameVisible ? undefined : css["invisible"])}
+                src={frameUrl}
+                title={"title"}
+                ref={handleIFrameRef}
+            />
+            {!frameVisible && <MakeCodeFramePlaceholder />}
+        </>
     );
     /* eslint-enable @microsoft/sdl/react-iframe-missing-sandbox */
 };

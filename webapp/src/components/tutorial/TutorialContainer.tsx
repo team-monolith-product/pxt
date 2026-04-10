@@ -49,7 +49,7 @@ export function TutorialContainer(props: TutorialContainerProps) {
 
     const showBack = currentStep !== 0;
     const showNext = currentStep !== steps.length - 1;
-    const showDone = !showNext && !pxt.appTarget.appTheme.lockedEditor && !hideIteration;
+    const isDone = !showNext && !pxt.appTarget.appTheme.lockedEditor && !hideIteration;
     const showImmersiveReader = pxt.appTarget.appTheme.immersiveReader;
     const isHorizontal = props.tutorialSimSidebar || pxt.BrowserUtils.isTabletSize();
 
@@ -223,22 +223,23 @@ export function TutorialContainer(props: TutorialContainerProps) {
     let modalActions: ModalButton[] = [{ label: lf("Ok"), onclick: onModalClose,
         icon: "arrow circle right", className: "green" }];
 
-    if (showBack) modalActions.unshift({ label: lf("Back"), onclick: tutorialStepBack,
+    if (showBack) modalActions.unshift({ label: lf("Back"), onclick: tutorialStepBack, className: "neutral",
         icon: "arrow circle left", disabled: !showBack, labelPosition: "left" })
 
     if (showImmersiveReader) {
         modalActions.push({
-            className: "immersive-reader-button",
+            className: "immersive-reader-button neutral",
             onclick: async () => { await launchImmersiveReaderAsync(currentStepInfo.contentMd, tutorialOptions) },
             ariaLabel: lf("Launch Immersive Reader"),
             title: lf("Launch Immersive Reader")
         })
     }
 
+    const hideDone = tutorialOptions.metadata?.hideDone;
     const doneButtonLabel = lf("Finish the tutorial.");
     const nextButtonLabel = lf("Go to the next step of the tutorial.");
-    const nextButton = showDone
-        ? <Button icon="check circle" title={doneButtonLabel} ariaLabel={doneButtonLabel} text={lf("Done")} onClick={onTutorialComplete} />
+    const nextButton = isDone
+        ? hideDone ? null : <Button icon="check circle" title={doneButtonLabel} ariaLabel={doneButtonLabel} text={lf("Done")} onClick={onTutorialComplete} />
         : <Button icon="arrow circle right" title={nextButtonLabel} ariaLabel={nextButtonLabel} disabled={!showNext} text={lf("Next")} onClick={() => validateTutorialStep()} />;
 
     const stepCounter = <TutorialStepCounter
@@ -247,6 +248,7 @@ export function TutorialContainer(props: TutorialContainerProps) {
         totalSteps={steps.length}
         title={name}
         isHorizontal={isHorizontal}
+        hideDone={hideDone}
         setTutorialStep={handleStepCounterSetStep}
         onDone={onTutorialComplete} />;
     const hasHint = !!hintMarkdown;
@@ -254,6 +256,10 @@ export function TutorialContainer(props: TutorialContainerProps) {
     const handleMarkedContentRef = (ref: HTMLDivElement) => {
         stepContentRef.current = ref;
     }
+
+    const showReplaceMyCode =
+        hasTemplate && currentStep == firstNonModalStep && preferredEditor !== "asset" &&
+        !pxt.appTarget.appTheme.hideReplaceMyCode && !props.tutorialOptions.metadata?.hideReplaceMyCode
 
     return <div className="tutorial-container" ref={containerRef}>
         {!isHorizontal && stepCounter}
@@ -281,8 +287,9 @@ export function TutorialContainer(props: TutorialContainerProps) {
                 tutorialId={tutorialId}
                 currentStep={currentStep}
                 attemptsWithError={stepErrorAttemptCount} />}
-        {hasTemplate && currentStep == firstNonModalStep && preferredEditor !== "asset" && !pxt.appTarget.appTheme.hideReplaceMyCode &&
-            <TutorialResetCode tutorialId={tutorialId} currentStep={visibleStep} resetTemplateCode={parent.resetTutorialTemplateCode} />}
+        {showReplaceMyCode &&
+            <TutorialResetCode tutorialId={tutorialId} currentStep={visibleStep} resetTemplateCode={parent.resetTutorialTemplateCode} />
+        }
         {showScrollGradient && <div className="tutorial-scroll-gradient" />}
         {isModal && !hideModal && <Modal isOpen={isModal} closeIcon={false} header={currentStepInfo.title || name} buttons={modalActions}
             className="hintdialog" onClose={onModalClose} dimmer={true}

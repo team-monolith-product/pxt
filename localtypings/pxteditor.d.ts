@@ -1,6 +1,8 @@
 /// <reference path="../built/pxtlib.d.ts" />
 /// <reference path="./projectheader.d.ts" />
 /// <reference path="./validatorPlan.d.ts" />
+/// <reference path="./ocv.d.ts" />
+/// <reference path="./monaco.d.ts" />
 
 declare namespace pxt.editor {
     export interface EditorMessage {
@@ -75,11 +77,14 @@ declare namespace pxt.editor {
         | "convertcloudprojectstolocal"
         | "setlanguagerestriction"
         | "gettoolboxcategories"
+        | "getblockastext"
 
         | "toggletrace" // EditorMessageToggleTraceRequest
+        | "showthemepicker"
         | "togglehighcontrast"
         | "sethighcontrast" // EditorMessageSetHighContrastRequest
         | "togglegreenscreen"
+        | "togglekeyboardcontrols"
         | "settracestate" //
         | "setsimulatorfullscreen" // EditorMessageSimulatorFullScreenRequest
 
@@ -101,6 +106,8 @@ declare namespace pxt.editor {
         | "editorcontentloaded"
         | "serviceworkerregistered"
         | "runeval"
+        | "precachetutorial"
+        | "setcolorthemebyid"
 
         // package extension messasges
         | ExtInitializeType
@@ -411,10 +418,17 @@ declare namespace pxt.editor {
         carryoverPreviousCode?: boolean;
     }
 
+    export interface PrecacheTutorialRequest extends EditorMessageRequest {
+        action: "precachetutorial";
+        data: pxt.github.GHTutorialResponse;
+        lang?: string;
+    }
+
     export interface InfoMessage {
         versions: pxt.TargetVersions;
         locale: string;
         availableLocales?: string[];
+        keyboardControls: boolean;
     }
 
     export interface PackageExtensionData {
@@ -457,12 +471,21 @@ declare namespace pxt.editor {
         advanced?: boolean;
     }
 
-    export interface EditorMessageServiceWorkerRegisteredRequest extends EditorMessageRequest {
-        action: "serviceworkerregistered";
-    }
-
     export interface EditorMessageGetToolboxCategoriesResponse {
         categories: pxt.editor.ToolboxCategoryDefinition[];
+    }
+
+    export interface EditorMessageGetBlockAsTextRequest extends EditorMessageRequest {
+        action: "getblockastext";
+        blockId: string;
+    }
+
+    export interface EditorMessageGetBlockAsTextResponse {
+        blockAsText: pxt.editor.BlockAsText | undefined;
+    }
+
+    export interface EditorMessageServiceWorkerRegisteredRequest extends EditorMessageRequest {
+        action: "serviceworkerregistered";
     }
 
     export interface DataStreams<T> {
@@ -494,6 +517,12 @@ declare namespace pxt.editor {
         type: "pxtpkgext";
         extId: string;
         body?: any;
+    }
+
+    export interface EditorMessageSetColorThemeRequest extends EditorMessageRequest {
+        action: "setcolorthemebyid";
+        colorThemeId: string;
+        savePreference?: boolean;
     }
 
     /**
@@ -694,6 +723,8 @@ declare namespace pxt.editor {
         zoomOut(): void;
         resize(): void;
         setScale(scale: number): void;
+        focusWorkspace(): void;
+        focusToolbox(): void;
     }
 
     export interface IFile {
@@ -736,6 +767,11 @@ declare namespace pxt.editor {
         download?: string;
         save?: string;
         cmd?: string;
+    }
+
+    export interface FeedbackState {
+        showing: boolean;
+        kind?: ocv.FeedbackKind;
     }
 
     export interface IAppProps { }
@@ -788,10 +824,15 @@ declare namespace pxt.editor {
         simSerialActive?: boolean;
         deviceSerialActive?: boolean;
         errorListState?: ErrorListState;
+        errorListCollapsed?: boolean;
         screenshoting?: boolean;
         extensionsVisible?: boolean;
         isMultiplayerGame?: boolean; // Arcade: Does the current project contain multiplayer blocks?
-        onboarding?: pxt.tour.BubbleStep[];
+        activeTourConfig?: pxt.tour.TourConfig;
+        areaMenuOpen?: boolean;
+        feedback?: FeedbackState;
+        themePickerOpen?: boolean;
+        errorListNote?: string;
     }
 
     export interface EditorState {
@@ -840,6 +881,7 @@ declare namespace pxt.editor {
 
     export interface SimulatorStartOptions {
         clickTrigger?: boolean;
+        background?: boolean;
     }
 
     export interface ImportFileOptions {
@@ -871,13 +913,15 @@ declare namespace pxt.editor {
 
     export type Activity = "tutorial" | "recipe" | "example";
 
+    export type BuiltInHelp = "keyboardControls";
+
     export interface IProjectView {
         state: IAppState;
         setState(st: IAppState): void;
         forceUpdate(): void;
 
         reloadEditor(): void;
-        openBlocks(): void;
+        openBlocks(showKeyboardControlsHint?: boolean): void;
         openJavaScript(giveFocusOnLoading?: boolean): void;
         openPython(giveFocusOnLoading?: boolean): void;
         openAssets(): void;
@@ -909,6 +953,7 @@ declare namespace pxt.editor {
 
         newEmptyProject(name?: string, documentation?: string, preferredEditor?: string): void;
         newProject(options?: pxt.editor.ProjectCreationOptions): void;
+        newUserCreatedProject(firstProject: boolean): Promise<void>;
         createProjectAsync(options: pxt.editor.ProjectCreationOptions): Promise<void>;
         importExampleAsync(options: ExampleImportOptions): Promise<void>;
         showScriptManager(): void;
@@ -928,6 +973,7 @@ declare namespace pxt.editor {
         setSideFile(fn: IFile, line?: number): void;
         navigateToError(diag: pxtc.KsDiagnostic): void;
         setSideDoc(path: string, blocksEditor?: boolean): void;
+        toggleBuiltInSideDoc(help: BuiltInHelp, focusIfOpen: boolean): void;
         setSideMarkdown(md: string): void;
         setSideDocCollapsed(shouldCollapse?: boolean): void;
         removeFile(fn: IFile, skipConfirm?: boolean): void;
@@ -941,6 +987,7 @@ declare namespace pxt.editor {
         completeTutorialAsync(): Promise<void>;
         showTutorialHint(): void;
         isTutorial(): boolean;
+        useTutorialSimSidebarLayout(): boolean;
         onEditorContentLoaded(): void;
         pokeUserActivity(): void;
         stopPokeUserActivity(): void;
@@ -950,7 +997,7 @@ declare namespace pxt.editor {
 
         anonymousPublishHeaderByIdAsync(headerId: string, projectName?: string): Promise<ShareData>;
         publishCurrentHeaderAsync(persistent: boolean, screenshotUri?: string): Promise<string>;
-        publishAsync (name: string, screenshotUri?: string, forceAnonymous?: boolean): Promise<ShareData>;
+        publishAsync (name: string, description?: string,screenshotUri?: string, forceAnonymous?: boolean): Promise<ShareData>;
 
         startStopSimulator(opts?: SimulatorStartOptions): void;
         stopSimulator(unload?: boolean, opts?: SimulatorStartOptions): void;
@@ -1004,12 +1051,13 @@ declare namespace pxt.editor {
         // getBlocks(): Blockly.Block[];
         getBlocks(): any[];
         getToolboxCategories(advanced?: boolean): pxt.editor.EditorMessageGetToolboxCategoriesResponse;
+        getBlockAsText(blockId: string): pxt.editor.BlockAsText | undefined;
 
         toggleHighContrast(): void;
         setHighContrast(on: boolean): void;
         toggleGreenScreen(): void;
-        toggleAccessibleBlocks(): void;
-        setAccessibleBlocks(enabled: boolean): void;
+        toggleAccessibleBlocks(eventSource: string): void;
+        isAccessibleBlocks(): boolean;
         launchFullEditor(): void;
         resetWorkspace(): void;
 
@@ -1018,6 +1066,7 @@ declare namespace pxt.editor {
         isEmbedSimActive(): boolean;
         isBlocksActive(): boolean;
         isJavaScriptActive(): boolean;
+        isTextSourceCodeEditorActive(): boolean;
         isPythonActive(): boolean;
         isAssetsActive(): boolean;
 
@@ -1027,18 +1076,22 @@ declare namespace pxt.editor {
         showLightbox(): void;
         hideLightbox(): void;
         showOnboarding(): void;
-        hideOnboarding(): void;
+        showTour(config: pxt.tour.TourConfig): void;
+        closeTour(): void;
+        toggleAreaMenu(): void;
         showKeymap(show: boolean): void;
         toggleKeymap(): void;
         signOutGithub(): void;
 
         showReportAbuse(): void;
         showLanguagePicker(): void;
+        showThemePicker(): void;
         showShareDialog(title?: string, kind?: "multiplayer" | "vscode" | "share"): void;
         showAboutDialog(): void;
+        showFeedbackDialog(kind: ocv.FeedbackKind): void;
         showTurnBackTimeDialogAsync(): Promise<void>;
 
-        showLoginDialog(continuationHash?: string): void;
+        showLoginDialog(continuationHash?: string, dialogMessages?: { signInMessage?: string; signUpMessage?: string }): void;
         showProfileDialog(location?: string): void;
 
         showImportUrlDialog(): void;
@@ -1072,6 +1125,7 @@ declare namespace pxt.editor {
         hasHeaderBeenPersistentShared(): boolean;
         getSharePreferenceForHeader(): boolean;
         saveSharePreferenceForHeaderAsync(anonymousByDefault: boolean): Promise<void>;
+        setColorThemeById(colorThemeId: string, savePreference: boolean): void;
     }
 
     export interface IHexFileImporter {
@@ -1109,6 +1163,7 @@ declare namespace pxt.editor {
         blocklyToolbox: ToolboxDefinition;
         monacoToolbox: ToolboxDefinition;
         projectView: IProjectView;
+        showNotification: (msg: string) => void;
     }
 
     export interface IToolboxOptions {
@@ -1116,9 +1171,17 @@ declare namespace pxt.editor {
         monacoToolbox?: ToolboxDefinition;
     }
 
+    export interface ExtensionInitOptions {
+        confirmAsync: (options: any) => Promise<number>;
+        infoNotification: (msg: string) => void;
+        warningNotification: (msg: string) => void;
+        errorNotification: (msg: string) => void;
+    }
+
     export interface ExtensionResult {
         hexFileImporters?: IHexFileImporter[];
         resourceImporters?: IResourceImporter[];
+        initAsync?: (opts: ExtensionInitOptions) => Promise<void>;
         beforeCompile?: () => void;
         patchCompileResultAsync?: (r: pxtc.CompileResult) => Promise<void>;
         deployAsync?: (r: pxtc.CompileResult) => Promise<void>;
@@ -1133,13 +1196,35 @@ declare namespace pxt.editor {
         blocklyPatch?: (pkgTargetVersion: string, dom: Element) => void;
         webUsbPairDialogAsync?: (pairAsync: () => Promise<boolean>, confirmAsync: (options: any) => Promise<number>) => Promise<number>;
         mkPacketIOWrapper?: (io: pxt.packetio.PacketIO) => pxt.packetio.PacketIOWrapper;
+        getDownloadMenuItems?: () => any[]; /* sui.ItemProps[] */
+        notifyProjectCompiled?: (headerId: string, compileResult: pxtc.CompileResult) => void;
+        notifyProjectSaved?: (header: pxt.workspace.Header) => void;
+        onDownloadButtonClick?: () => Promise<void>;
+        getDefaultProjectName?: () => string; // If defined, replaces 'Untitled' as the default project name
+        onPostHostMessage?: (msg: pxt.editor.EditorMessageRequest) => void;
+        perfMeasurementThresholdMs?: number;
+        onPerfMilestone?: (payload: { milestone: string, time: number, params?: Map<string> }) => void;
+        onPerfMeasurement?: (payload: { name: string, start: number, duration: number, params?: Map<string> }) => void;
 
         // Used with the @tutorialCompleted macro. See docs/writing-docs/tutorials.md for more info
         onTutorialCompleted?: () => void;
+        onMarkdownActivityLoad?: (path: string, title?: string, editorProjectName?: string) => Promise<void>;
 
         // Used with @codeStart, @codeStop metadata (MINECRAFT HOC ONLY)
         onCodeStart?: () => void;
         onCodeStop?: () => void;
+
+        experiments?: Experiment[];
+        monacoFieldEditors?: MonacoFieldEditorDefinition[];
+    }
+
+    export interface Experiment {
+        id: string; // == field in apptheme also assumes image at /static/experiments/ID.png
+        name: string;
+        description: string;
+        feedbackUrl?: string; // allows user to put feedback
+        enableOnline?: boolean; // requires internet connection, disable in offline app
+        onClick?: () => void; // code to run when the experiment is clicked
     }
 
     export interface FieldExtensionOptions {
@@ -1271,6 +1356,15 @@ declare namespace pxt.editor {
         blockId?: string;
     }
 
+    export interface BlockAsText {
+        parts: BlockTextPart[];
+    }
+
+    export interface BlockTextPart {
+        kind: "label" | "break" | "param",
+        content?: string,
+    }
+
     interface BaseAssetEditorRequest {
         id?: number;
         files: pxt.Map<string>;
@@ -1335,6 +1429,47 @@ declare namespace pxt.editor {
     }
 
     type AssetEditorEvent = AssetEditorRequestSaveEvent | AssetEditorReadyEvent;
+
+    export interface TextEdit {
+        range: monaco.Range;
+        replacement: string;
+    }
+
+    export interface MonacoFieldEditorHost {
+        contentDiv(): HTMLDivElement;
+        getText(range: monaco.Range): string;
+        blocksInfo(): pxtc.BlocksInfo;
+
+        package(): pxt.MainPackage;
+        writeFileAsync(filename: string, content: string): Promise<void>;
+        readFile(filename: string): string;
+    }
+
+    export interface MonacoFieldEditor {
+        getId(): string;
+        showEditorAsync(fileType: pxt.editor.FileType, editrange: monaco.Range, host: MonacoFieldEditorHost): Promise<TextEdit>;
+        onClosed(): void;
+        dispose(): void;
+    }
+
+    export interface MonacoFieldEditorDefinition {
+        id: string;
+        matcher: MonacoFindArguments;
+        foldMatches?: boolean;
+        alwaysBuildOnClose?: boolean;
+        glyphCssClass?: string;
+        weight?: number; // higher weight will override lower weight when on same line
+        proto: { new(): MonacoFieldEditor };
+        heightInPixels?: number;
+    }
+
+    export interface MonacoFindArguments {
+        searchString: string;
+        isRegex: boolean;
+        matchWholeWord: boolean;
+        matchCase: boolean;
+        validateRange?: (range: monaco.Range, model: monaco.editor.ITextModel) => monaco.Range;
+    }
 }
 
 declare namespace pxt.workspace {

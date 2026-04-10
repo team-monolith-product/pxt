@@ -21,7 +21,7 @@ export const dispatchResetUser = () => ({ type: actions.RESET_USER });
 export const dispatchSetPageTitle = (title: string) => ({ type: actions.SET_PAGE_TITLE, title });
 export const dispatchSetPageDescription = (description: string) => ({ type: actions.SET_PAGE_DESCRIPTION, description });
 export const dispatchSetPageInfoUrl = (infoUrl: string) => ({ type: actions.SET_PAGE_INFO_URL, infoUrl });
-export const dispatchSetPageBackgroundImageUrl = (backgroundImageUrl: string) => ({ type: actions.SET_PAGE_BACKGROUND_IMAGE_URL, backgroundImageUrl });
+export const dispatchSetPageBackgroundImageUrl = (backgroundImageUrl: string, pixelatedBackground?: boolean) => ({ type: actions.SET_PAGE_BACKGROUND_IMAGE_URL, backgroundImageUrl, pixelatedBackground });
 export const dispatchSetPageBannerImageUrl = (bannerImageUrl: string) => ({ type: actions.SET_PAGE_BANNER_IMAGE_URL, bannerImageUrl });
 export const dispatchSetPageTheme = (theme: SkillGraphTheme) => ({ type: actions.SET_PAGE_THEME, theme });
 export const dispatchSetPageSourceUrl = (url: string, status: PageSourceStatus) => ({ type: actions.SET_PAGE_SOURCE_URL, url, status });
@@ -37,6 +37,10 @@ export const dispatchShowUserProfile = () => ({ type: actions.SHOW_USER_PROFILE 
 export const dispatchCloseUserProfile = () => ({ type: actions.HIDE_USER_PROFILE });
 export const dispatchShowSelectLanguage = () => ({ type: actions.SHOW_SELECT_LANGUAGE });
 export const dispatchCloseSelectLanguage = () => ({ type: actions.HIDE_SELECT_LANGUAGE });
+export const dispatchShowSelectTheme = () => ({ type: actions.SHOW_SELECT_THEME });
+export const dispatchCloseSelectTheme = () => ({ type: actions.HIDE_SELECT_THEME });
+export const dispatchShowFeedback = () => ({ type: actions.SHOW_FEEDBACK });
+export const dispatchCloseFeedback = () => ({ type: actions.HIDE_FEEDBACK });
 
 export const dispatchSetShareStatus = (headerId?: string, projectName?: string, data?: ShareData) =>  ({ type: actions.SET_SHARE_STATUS, headerId, projectName, data });
 export const dispatchSetCloudStatus = (headerId: string, status: string) => ({ type: actions.SET_CLOUD_STATUS, headerId, status });

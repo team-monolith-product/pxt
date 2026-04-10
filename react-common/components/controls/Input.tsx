@@ -32,6 +32,15 @@ export interface InputProps extends ControlProps {
     onOptionSelected?: (value: string) => void;
 }
 
+const sanitizeForDomId = (text: string | undefined) => {
+    if (!text) {
+        return "";
+    }
+
+    const sanitized = text.replace(/[^a-zA-Z0-9_-]/g, "-");
+    return sanitized || "option";
+};
+
 export const Input = (props: InputProps) => {
     const {
         id,
@@ -59,15 +68,20 @@ export const Input = (props: InputProps) => {
         onBlur,
         onOptionSelected,
         handleInputRef,
-        preserveValueOnBlur,
+        preserveValueOnBlur = true,
         options
     } = props;
 
     const [value, setValue] = React.useState(initialValue || "");
     const [expanded, setExpanded] = React.useState(false);
     const [filter] = React.useState(props.filter ? new RegExp(props.filter) : undefined);
+    const optionValues = React.useMemo(() => (options ? Object.values(options) : []), [options]);
 
     let container: HTMLDivElement;
+
+    React.useEffect(() => {
+        setValue(initialValue || "");
+    }, [initialValue]);
 
     const handleContainerRef = (ref: HTMLDivElement) => {
         if (!ref) return;
@@ -104,16 +118,28 @@ export const Input = (props: InputProps) => {
                 e.preventDefault();
                 onEnterKey(value);
             }
-        } else if (options && expanded && e.key === "ArrowDown") {
-            document.getElementById(getDropdownOptionId(Object.values(options)[0]))?.focus();
+        } else if (options && e.key === "ArrowDown") {
+            if (expanded) {
+                document.getElementById(getDropdownOptionId(optionValues[0]))?.focus();
+            } else {
+                expandButtonClickHandler();
+            }
             e.preventDefault();
             e.stopPropagation();
         } else if (options && expanded && e.key === "ArrowUp") {
-            const optionVals = Object.values(options);
-            document.getElementById(getDropdownOptionId(optionVals[optionVals.length - 1]))?.focus();
+            document.getElementById(getDropdownOptionId(optionValues[optionValues.length - 1]))?.focus();
             e.preventDefault();
             e.stopPropagation();
         }
+    }
+
+    const captureEscapeKey = (e: React.KeyboardEvent) => {
+        if (e.code !== "Escape") return;
+        (e.target as HTMLElement).blur();
+        expandButtonClickHandler();
+        document.getElementById(id)?.focus();
+        e.stopPropagation();
+        e.preventDefault();
     }
 
     const iconClickHandler = () => {
@@ -137,7 +163,7 @@ export const Input = (props: InputProps) => {
             onBlur(value);
         }
         if (!preserveValueOnBlur) {
-            setValue(undefined);
+            setValue("");
         }
     }
 
@@ -160,7 +186,17 @@ export const Input = (props: InputProps) => {
     }
 
     const getDropdownOptionId = (option: string) => {
-        return option && Object.values(options).indexOf(option) != -1 ? `dropdown-item-${option}` : undefined;
+        if (!optionValues.length) {
+            return undefined;
+        }
+
+        const index = optionValues.indexOf(option);
+        if (index === -1) {
+            return undefined;
+        }
+
+        const sanitized = sanitizeForDomId(option);
+        return `dropdown-item-${index}-${sanitized}`;
     }
 
     return (
@@ -208,15 +244,17 @@ export const Input = (props: InputProps) => {
                         ariaHasPopup="listbox"
                         ariaExpanded={expanded}
                         ariaLabel={ariaLabel}
+                        tabIndex={-1}
                         onClick={expandButtonClickHandler} />}
             </div>
             {expanded &&
                 <FocusList role="listbox"
                     className="common-menu-dropdown-pane common-dropdown-shadow"
-                    childTabStopId={getDropdownOptionId(value) ?? getDropdownOptionId(Object.values(options)[0])}
+                    childTabStopId={getDropdownOptionId(value) ?? getDropdownOptionId(optionValues[0])}
                     aria-labelledby={id}
                     useUpAndDownArrowKeys={true}>
-                        <ul role="presentation">
+                        <ul role="presentation"
+                        onKeyDown={captureEscapeKey}>
                             { Object.keys(options).map(option =>
                                 <li key={option} role="presentation">
                                     <Button

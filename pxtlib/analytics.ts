@@ -40,11 +40,13 @@ namespace pxt.analytics {
 
         const te = pxt.tickEvent;
         pxt.tickEvent = function (id: string, data?: Map<string | number>, opts?: TelemetryEventOptions): void {
+            data = pxt.Util.cleanData(data);
+
             if (consoleTicks != ConsoleTickOptions.Off)
             {
                 const prefix = consoleTicks == ConsoleTickOptions.Short ? "" : `${new Date().toLocaleTimeString(undefined, { hour12: false })} - Tick - `;
                 const tickInfo = `${id} ${data ? JSON.stringify(data) : "<no data>"} ${opts ? JSON.stringify(opts) : "<no opts>"}`;
-                console.log(prefix + tickInfo);
+                pxt.log(prefix + tickInfo);
             }
 
             if (te) te(id, data, opts);
@@ -53,8 +55,8 @@ namespace pxt.analytics {
 
             if (!data) pxt.aiTrackEvent(id);
             else {
-                const props: Map<string> = { ...defaultProps } || {};
-                const measures: Map<number> = { ...defaultMeasures } || {};
+                const props: Map<string> = { ...defaultProps };
+                const measures: Map<number> = { ...defaultMeasures };
                 Object.keys(data).forEach(k => {
                     if (typeof data[k] == "string") props[k] = <string>data[k];
                     else if (typeof data[k] == "number") measures[k] = <number>data[k];
@@ -66,6 +68,7 @@ namespace pxt.analytics {
 
         const rexp = pxt.reportException;
         pxt.reportException = function (err: any, data: pxt.Map<string | number>): void {
+            data = pxt.Util.cleanData(data);
             if (rexp) rexp(err, data);
             const props: pxt.Map<string> = {
                 target: pxt.appTarget.id,
@@ -77,6 +80,7 @@ namespace pxt.analytics {
 
         const re = pxt.reportError;
         pxt.reportError = function (cat: string, msg: string, data?: pxt.Map<string | number>): void {
+            data = pxt.Util.cleanData(data);
             if (re) re(cat, msg, data);
             try {
                 throw msg

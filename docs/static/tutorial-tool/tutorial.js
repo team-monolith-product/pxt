@@ -88,22 +88,22 @@ var targets = [
                 url: "https://maker.makecode.com/?controller=1"
             }
         ]
-    }
-    /* not supported
-    , {
+    }, {
         name: "LEGO EV3",
         id: "ev3",
         endpoints: [
+            /*
+            {
+                name: "",
+                url: "https://makecode.mindstorms.com?controller=1"
+            },
+            */
             {
                 name: "beta",
                 url: "https://makecode.mindstorms.com/beta?controller=1"
-            },
-            {
-                name: "released",
-                url: "https://makecode.mindstorms.com?controller=1"
             }
         ]
-    } */
+    }
 ];
 function shareScript(md, done) {
     function request(url, data) {
@@ -250,7 +250,7 @@ function receiveMessage(ev) {
     }
     if (msg.type == "pxteditor") {
         var req = pendingMsgs[msg.id];
-        if (req.action == "renderblocks") {
+        if (req?.action == "renderblocks") {
             var img = document.createElement("img");
             img.src = msg.resp;
         }

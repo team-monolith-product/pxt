@@ -15,6 +15,7 @@ interface SkillGraphContainerProps {
     graphs: SvgGraph[];
     backgroundImageUrl: string;
     backgroundColor: string;
+    pixelatedBackground?: boolean;
     strokeColor: string;
     graphSize: {
         width: number;
@@ -50,7 +51,7 @@ export class SkillGraphContainerImpl extends React.Component<SkillGraphContainer
     }
 
     render() {
-        const { maps, graphs, graphSize, backgroundImageUrl, backgroundColor, strokeColor } = this.props;
+        const { maps, graphs, graphSize, backgroundImageUrl, pixelatedBackground, backgroundColor, strokeColor } = this.props;
         const { backgroundSize } = this.state;
         let altTextColor: string = 'black';
         let backgroundAltText: string = lf("Background image for {0}", maps[0]?.displayName || lf("skillmap"));
@@ -86,7 +87,7 @@ export class SkillGraphContainerImpl extends React.Component<SkillGraphContainer
 
         return <div className="skill-graph-wrapper">
             <div className={`skill-graph-content ${useBackground ? "has-background" : ""}`}>
-                <MenuBar className="skill-graph-activities" ariaLabel={lf("Skill Map")}>
+                <MenuBar className="skill-graph-activities" ariaLabel={lf("Skillmap")}>
                     <svg viewBox={`-${widthDiff + padding} -${heightDiff + padding} ${width + padding * 2} ${height + padding * 2}`} preserveAspectRatio="xMidYMid meet">
                         {graphs.map((el, i) => {
                             translateY += el.height;
@@ -97,7 +98,13 @@ export class SkillGraphContainerImpl extends React.Component<SkillGraphContainer
                     </svg>
                 </MenuBar>
                 {backgroundImageUrl && <div className="skill-graph-background">
-                    <img src={backgroundImageUrl} alt={backgroundAltText} onLoad={this.onImageLoad} style={{ color: altTextColor }} />
+                    <img
+                        src={backgroundImageUrl}
+                        className={pixelatedBackground ? "pixelated" : undefined}
+                        alt={backgroundAltText}
+                        onLoad={this.onImageLoad}
+                        style={{ color: altTextColor }}
+                    />
                 </div>}
             </div>
         </div>
@@ -110,7 +117,7 @@ function mapStateToProps(state: SkillMapState, ownProps: any) {
 
     const props = ownProps as SkillGraphContainerProps
 
-    // Compute graph layout, update size of skill map
+    // Compute graph layout, update size of skillmap
     const graphs = props.maps.map(el => getGraph(el));
     const width = graphs?.length ? graphs.map(el => el.width).reduce((prev, curr) => Math.max(prev, curr)) : 0;
     const height = graphs?.length ? graphs.map(el => el.height).reduce((prev, curr) => prev + curr) : 0;

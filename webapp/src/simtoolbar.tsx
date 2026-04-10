@@ -109,9 +109,9 @@ export class SimulatorToolbar extends data.Component<SimulatorProps, {}> {
         const isFullscreen = parentState.fullscreen;
         const inTutorial = !!parentState.tutorialOptions && !!parentState.tutorialOptions.tutorial;
         const isTabTutorial = inTutorial && !pxt.BrowserUtils.useOldTutorialLayout();
-        const inCodeEditor = parent.isBlocksActive() || parent.isJavaScriptActive() || parent.isPythonActive();
+        const inCodeEditor = parent.isBlocksActive() || parent.isTextSourceCodeEditorActive() || parent.isPythonActive();
 
-        const run = true;
+        const run = !simOpts.hideRun;
         const restart = run && !simOpts.hideRestart;
         const debug = targetTheme.debugger && !inTutorial && !pxt.BrowserUtils.isIE() && !pxt.shell.isReadOnly();
         const debugging = parentState.debugging;
@@ -119,7 +119,7 @@ export class SimulatorToolbar extends data.Component<SimulatorProps, {}> {
         const fullscreen = run && !simOpts.hideFullscreen && !sandbox;
         const audio = run && targetTheme.hasAudio;
         const isHeadless = simOpts.headless;
-        const screenshot = !!targetTheme.simScreenshot;
+        const screenshot = !!targetTheme.simScreenshot && !pxt.shell.isTimeMachineEmbed();
         const screenshotClass = !!parentState.screenshoting ? "loading" : "";
         const debugBtnEnabled = !isStarting && !isSimulatorPending && inCodeEditor;
         const runControlsEnabled = !debugging && !isStarting && !isSimulatorPending;
@@ -141,9 +141,9 @@ export class SimulatorToolbar extends data.Component<SimulatorProps, {}> {
             <div className={`ui icon tiny buttons`} style={{ padding: "0" }}>
                 {make && <sui.Button disabled={debugging} icon='configure' className="secondary" title={makeTooltip} onClick={this.openInstructions} />}
                 {run && !targetTheme.bigRunButton && <PlayButton parent={parent} simState={parentState.simState} debugging={parentState.debugging} />}
-                {fullscreen && <sui.Button key='fullscreenbtn' className="fullscreen-button tablet only hidefullscreen" icon="xicon fullscreen" title={fullscreenTooltip} onClick={this.toggleSimulatorFullscreen} />}
+                {fullscreen && <sui.Button key='fullscreenbtn' className="fullscreen-button tablet only hidefullscreen" icon="fas fa-expand-alt fa-flip-horizontal" fontAwesome={true} title={fullscreenTooltip} onClick={this.toggleSimulatorFullscreen} />}
                 {restart && <sui.Button disabled={!runControlsEnabled} key='restartbtn' className={`restart-button`} icon="refresh" title={restartTooltip} onClick={this.restartSimulator} />}
-                {run && debug && <sui.Button disabled={!debugBtnEnabled} key='debugbtn' className={`debug-button ${debugging ? "orange" : ""}`} icon="icon bug" title={debugTooltip} onClick={this.toggleDebug} />}
+                {run && debug && <sui.Button disabled={!debugBtnEnabled} key='debugbtn' className={`debug-button ${debugging ? "active" : ""}`} icon="icon bug" title={debugTooltip} onClick={this.toggleDebug} />}
                 {audio && isTabTutorial && <MuteButton onClick={this.toggleMute} state={parent.state.mute} className="hidefullscreen tutorial"/>}
                 {collapse && <sui.Button
                     className={`expand-button portrait only editortools-btn hidefullscreen`}
@@ -171,7 +171,7 @@ export class SimulatorToolbar extends data.Component<SimulatorProps, {}> {
             </div>}
             {!isHeadless && <div className={`ui icon tiny buttons computer only`} style={{ padding: "0" }}>
                 {screenshot && <sui.Button disabled={!isRunning} key='screenshotbtn' className={`screenshot-button ${screenshotClass}`} icon={`icon camera left`} title={screenshotTooltip} onClick={this.takeScreenshot} />}
-                {fullscreen && <sui.Button key='fullscreenbtn' className={`fullscreen-button`} icon={`xicon ${isFullscreen ? 'fullscreencollapse' : 'fullscreen'}`} title={fullscreenTooltip} onClick={this.toggleSimulatorFullscreen} />}
+                {fullscreen && <sui.Button key='fullscreenbtn' className={`fullscreen-button`} icon={`fas fa-flip-horizontal ${isFullscreen ? 'fa-compress-alt' : 'fa-expand-alt'}`} fontAwesome={true} title={fullscreenTooltip} onClick={this.toggleSimulatorFullscreen} />}
             </div>}
         </aside >;
     }
@@ -239,7 +239,7 @@ const MuteButton = ({onClick, state, className}: MuteButtonProps) => {
     }
 
     return <sui.Button
-        className={`${className || ''} mute-button ${state === MuteState.Muted ? 'red' : ''}`}
+        className={`${className || ''} mute-button ${state === MuteState.Muted ? 'active' : ''}`}
         icon={`${state !== MuteState.Unmuted  ? 'volume off' : 'volume up'}`}
         disabled={state === MuteState.Disabled}
         title={tooltip}

@@ -19,8 +19,15 @@ namespace pxt.tutorial {
             jres,
             assetJson,
             customTs,
-            simThemeJson
+            simThemeJson,
+            hiddenNamespaces
         } = computeBodyMetadata(body);
+
+        // For python HOC, hide the toolbox (we don't support flyoutOnly mode).
+        if (pxt.BrowserUtils.useOldTutorialLayout() && language === "python" && metadata.flyoutOnly) {
+            metadata.flyoutOnly = false;
+            metadata.hideToolbox = true;
+        }
 
         // noDiffs legacy
         if (metadata.diffs === true // enabled in tutorial
@@ -60,12 +67,13 @@ namespace pxt.tutorial {
             customTs,
             globalBlockConfig,
             globalValidationConfig,
-            simTheme
+            simTheme,
+            hiddenNamespaces
         };
     }
 
     export function getMetadataRegex(): RegExp {
-        return /``` *(sim|block|blocks|filterblocks|spy|ghost|typescript|ts|js|javascript|template|python|jres|assetjson|customts|simtheme|python-template|ts-template|typescript-template|js-template|javascript-template)\s*\n([\s\S]*?)\n```/gmi;
+        return /``` *(sim|block|blocks|filterblocks|spy|ghost|typescript|ts|js|javascript|template|python|jres|assetjson|customts|simtheme|python-template|ts-template|typescript-template|js-template|javascript-template|hiddennamespaces)\s*\n([\s\S]*?)\n```/gmi;
     }
 
     function computeBodyMetadata(body: string) {
@@ -82,6 +90,7 @@ namespace pxt.tutorial {
         let assetJson: string;
         let customTs: string;
         let simThemeJson: string;
+        let hiddenNamespaces: string[];
         // Concatenate all blocks in separate code blocks and decompile so we can detect what blocks are used (for the toolbox)
         body
             .replace(/((?!.)\s)+/g, "\n")
@@ -141,8 +150,12 @@ namespace pxt.tutorial {
                         customTs = m2;
                         m2 = "";
                         break;
+                    case "hiddennamespaces":
+                        hiddenNamespaces = (m2 as string).split(/\s/m).map(s => s.trim()).filter(s => !!s);
+                        m2 = "";
+                        break;
                 }
-                code.push(m1 == "python" ? `\n${m2}\n` : `{\n${m2}\n}`);
+                code.push(language === "python" ? `\n${m2}\n` : `{\n${m2}\n}`);
                 idx++
                 return "";
             });
@@ -157,7 +170,8 @@ namespace pxt.tutorial {
             jres,
             assetJson,
             customTs,
-            simThemeJson
+            simThemeJson,
+            hiddenNamespaces
         };
 
         function checkTutorialEditor(expected: string) {
@@ -381,7 +395,7 @@ ${code}
     /* Remove hidden snippets from text */
     function stripHiddenSnippets(str: string): string {
         if (!str) return str;
-        const hiddenSnippetRegex = /```(filterblocks|package|ghost|config|template|jres|assetjson|simtheme|customts|blockconfig\.local|blockconfig\.global|validation\.local|validation\.global)\s*\n([\s\S]*?)\n```/gmi;
+        const hiddenSnippetRegex = /```(filterblocks|package|ghost|config|template|jres|assetjson|simtheme|customts|hiddennamespaces|blockconfig\.local|blockconfig\.global|validation\.local|validation\.global)\s*\n([\s\S]*?)\n```/gmi;
         return str.replace(hiddenSnippetRegex, '').trim();
     }
 
@@ -406,7 +420,7 @@ ${code}
         if (metadata.explicitHints !== undefined
             && pxt.appTarget.appTheme
             && pxt.appTarget.appTheme.tutorialExplicitHints)
-            metadata.explicitHints = true;
+                metadata.explicitHints = true;
 
         return { metadata, body };
     }
@@ -473,6 +487,7 @@ ${code}
             globalBlockConfig: tutorialInfo.globalBlockConfig,
             globalValidationConfig: tutorialInfo.globalValidationConfig,
             simTheme: tutorialInfo.simTheme,
+            hiddenNamespaces: tutorialInfo.hiddenNamespaces,
         };
 
         return { options: tutorialOptions, editor: tutorialInfo.editor };
@@ -499,7 +514,11 @@ ${code}
 
     export function resolveLocalizedMarkdown(ghid: pxt.github.ParsedRepo, files: pxt.Map<string>, fileName?: string): string {
         // if non-default language, find localized file if any
-        const mfn = (fileName || ghid.fileName || "README") + ".md";
+        let mfn = (fileName || ghid.fileName || "README");
+
+        if (!mfn.endsWith(".md")) {
+            mfn += ".md";
+        }
 
         let md: string = undefined;
         const [initialLang, baseLang, initialLangLowerCase] = pxt.Util.normalizeLanguageCode(pxt.Util.userLanguage());
@@ -594,5 +613,10 @@ ${code}
             );
 
         return hintCode;
+    }
+
+    export function shouldFilterProject(metadata: pxt.tutorial.TutorialMetadata): boolean {
+        if (!metadata) return false;
+        return !!(metadata.hideFromProjects || metadata.hideIteration);
     }
 }

@@ -5,9 +5,9 @@ import * as ReactTooltip from 'react-tooltip';
 
 import * as data from "./data";
 import * as core from "./core";
-import * as auth from "./auth";
 import { fireClickOnEnter } from "./util";
-import { focusLastActive } from "../../react-common/components/util";
+import { classList, focusLastActive } from "../../react-common/components/util";
+import { ThemeManager } from "../../react-common/components/theming/themeManager";
 
 export const appElement = document.getElementById('content');
 
@@ -25,6 +25,7 @@ export interface UiProps {
     tabIndex?: number;
     rightIcon?: boolean;
     inverted?: boolean;
+    fontAwesome?: boolean;
 }
 
 export type SIZES = 'mini' | 'tiny' | 'small' | 'medium' | 'large' | 'big' | 'huge' | 'massive';
@@ -43,7 +44,7 @@ function genericClassName(cls: string, props: UiProps, ignoreIcon: boolean = fal
 
 export function genericContent(props: UiProps) {
     let retVal = [
-        props.icon ? (<Icon key='iconkey' icon={props.icon + (props.text ? " icon-and-text " : "") + (props.iconClass ? " " + props.iconClass : '')} />) : null,
+        props.icon ? (<Icon key='iconkey' icon={props.icon + (props.text ? " icon-and-text " : "") + (props.iconClass ? " " + props.iconClass : '')} fontAwesome={props.fontAwesome} />) : null,
         props.text ? (<span key='textkey' className={'ui text' + (props.textClass ? ' ' + props.textClass : '')}>{props.text}</span>) : null,
     ]
     if (props.icon && props.rightIcon) retVal = retVal.reverse();
@@ -68,12 +69,15 @@ export interface DropdownProps extends UiProps {
     id?: string;
     onChange?: (v: string) => void;
     onClick?: () => boolean;    // Return 'true' to toggle open/close
+    onShow?: () => void;
+    onHide?: () => void;
 
     titleContent?: React.ReactNode;
     displayAbove?: boolean;
     displayRight?: boolean;
     displayLeft?: boolean;
     dataTooltip?: string;
+    closeOnItemClick?: boolean;
 }
 
 export interface DropdownState {
@@ -84,17 +88,22 @@ export interface DropdownState {
 export class DropdownMenu extends UIElement<DropdownProps, DropdownState> {
 
     show() {
+        this.props.onShow?.();
         this.setState({ open: true, focus: true });
     }
 
     hide() {
+        this.props.onHide?.();
         this.setState({ open: false });
     }
 
-    toggle() {
+    toggle(focusFirst?: boolean) {
         if (this.state.open) {
             this.hide();
         } else {
+            if (focusFirst) {
+                this.focusFirst = true;
+            }
             this.show();
         }
     }
@@ -104,19 +113,19 @@ export class DropdownMenu extends UIElement<DropdownProps, DropdownState> {
         el.focus();
     }
 
-    private blur(el: HTMLElement) {
+    setInactive(el: HTMLElement) {
         if (this.isActive(el)) {
             pxt.BrowserUtils.removeClass(el, "active");
         }
     }
 
-    private setActive(el: HTMLElement) {
+    setActive(el: HTMLElement) {
         if (!this.isActive(el)) {
             pxt.BrowserUtils.addClass(el, "active");
         }
     }
 
-    private isActive(el: HTMLElement) {
+    isActive(el: HTMLElement) {
         return el && pxt.BrowserUtils.containsClass(el, "active");
     }
 
@@ -127,8 +136,8 @@ export class DropdownMenu extends UIElement<DropdownProps, DropdownState> {
             const child = menu.childNodes[i] as HTMLElement;
             // Remove separators
             if (pxt.BrowserUtils.containsClass(child, "divider")) continue;
-            // Check if item is intended for mobile only views
-            if (pxt.BrowserUtils.containsClass(child, "mobile") && !pxt.BrowserUtils.isMobile()) continue;
+            // Check if item is visible. Some items are intended for mobile only views.
+            if (!child.offsetParent) continue;
             children.push(child);
         }
         return children;
@@ -139,61 +148,17 @@ export class DropdownMenu extends UIElement<DropdownProps, DropdownState> {
         return menu.contains(document.activeElement);
     }
 
-    private navigateToNextElement = (e: KeyboardEvent, prev: HTMLElement, next: HTMLElement) => {
-        const dropdown = this.refs["dropdown"] as HTMLElement;
-        const charCode = core.keyCodeFromEvent(e);
-        const current = e.currentTarget as HTMLElement;
-        if (charCode === 40 /* Down arrow */) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (next) {
-                this.focus(next);
-            }
-        } else if (charCode === 38 /* Up arrow */) {
-            e.preventDefault();
-            e.stopPropagation();
-            if (prev) {
-                this.focus(prev);
-            } else {
-                // Prev is undefined, go to dropdown
-                dropdown.focus();
-                this.setState({ open: false });
-            }
-        } else if (charCode === core.SPACE_KEY || charCode === core.ENTER_KEY) {
-            // Trigger click
-            e.preventDefault();
-            e.stopPropagation();
-            current.click();
+    handleFocusCapture = (e: React.FocusEvent<HTMLDivElement>) => {
+        const target = e.target as HTMLElement;
+        if (target && this.getChildren().includes(target)) {
+            this.setActive(target);
         }
     }
 
-    componentDidMount() {
-        const children = this.getChildren();
-        for (let i = 0; i < children.length; i++) {
-            const prev = i > 0 ? children[i - 1] as HTMLElement : undefined;
-            const child = children[i] as HTMLElement;
-            const next = i < children.length ? children[i + 1] as HTMLElement : undefined;
-
-            child.addEventListener('keydown', (e) => {
-                this.navigateToNextElement(e, prev, next);
-            })
-
-            child.addEventListener('focus', (e: FocusEvent) => {
-                this.setActive(child);
-            })
-            child.addEventListener('blur', (e: FocusEvent) => {
-                this.blur(child);
-            })
-
-            if (i == children.length - 1) {
-                // set tab on last child to clear focus
-                child.addEventListener('keydown', (e) => {
-                    const charCode = core.keyCodeFromEvent(e);
-                    if (!e.shiftKey && charCode === core.TAB_KEY) {
-                        this.hide();
-                    }
-                })
-            }
+    handleBlurCapture = (e: React.FocusEvent<HTMLDivElement>) => {
+        const target = e.target as HTMLElement;
+        if (target && this.getChildren().includes(target)) {
+            this.setInactive(target);
         }
     }
 
@@ -296,16 +261,66 @@ export class DropdownMenu extends UIElement<DropdownProps, DropdownState> {
         e.stopPropagation();
     }
 
+    private handleItemClick = (e: React.MouseEvent) => {
+        const { closeOnItemClick } = this.props;
+        const el = e.target as HTMLElement;
+        const itemEl = el.closest(".item") as HTMLElement;
+
+        if (closeOnItemClick && itemEl) {
+            this.setInactive(itemEl);
+            // Let the item's onClick run before closing the menu
+            setTimeout(() => this.hide(), 0);
+        } else {
+            e.stopPropagation();
+        }
+    }
+
     private focusFirst: boolean;
     private handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+        const dropdown = this.refs["dropdown"] as HTMLElement;
+        const children = this.getChildren();
+        const activeElementIndex = children.findIndex(el => this.isActive(el));
+        const activeChild = children[activeElementIndex];
+        const prev = activeElementIndex > 0 ? children[activeElementIndex - 1] as HTMLElement : undefined;
+        const next = activeElementIndex < children.length ? children[activeElementIndex + 1] as HTMLElement : undefined;
         const charCode = core.keyCodeFromEvent(e);
-        if (charCode === 40 /* Down arrow key */) {
+        if (charCode === 40 /* Down arrow */) {
             e.preventDefault();
-            this.focusFirst = true;
-            this.show();
+            e.stopPropagation();
+            // Show dropdown menu if not open
+            if (!this.state.open) {
+                this.focusFirst = true;
+                this.show();
+            }
+            if (next) {
+                this.focus(next);
+            }
+        } else if (charCode === 38 /* Up arrow */) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (prev) {
+                this.focus(prev);
+            } else {
+                // Prev is undefined, go to dropdown
+                dropdown.focus();
+                this.hide();
+            }
         } else if (charCode === core.SPACE_KEY || charCode === core.ENTER_KEY) {
+            // Trigger click on menu item or dropdown
             e.preventDefault();
-            this.toggle();
+            e.stopPropagation();
+            if (activeChild) {
+                activeChild.click();
+            } else {
+                if (!this.props.onClick || this.props.onClick()) {
+                    this.toggle(true);
+                }
+            }
+        } else if (activeElementIndex === children.length - 1 && !e.shiftKey && charCode === core.TAB_KEY) {
+            if (activeChild) {
+                this.setInactive(activeChild)
+            }
+            this.hide();
         }
     }
 
@@ -317,13 +332,13 @@ export class DropdownMenu extends UIElement<DropdownProps, DropdownState> {
         const aria = {
             'role': role || 'combobox',
             'aria-disabled': disabled,
-            'aria-haspopup': !!disabled,
-            'aria-expanded': open
-        }
+            'aria-haspopup': !disabled,
+            ...(role !== 'option' && { 'aria-expanded': open }) // Exclude aria-expanded when the dropdown is an option
+            }
         const menuAria = {
             'role': 'menu',
             'aria-label': lf("Dropdown menu {0}", title),
-            'aria-hidden': !!open
+            'aria-hidden': !open
         }
         const classes = cx([
             'ui',
@@ -351,13 +366,15 @@ export class DropdownMenu extends UIElement<DropdownProps, DropdownState> {
                 onKeyDown={this.handleKeyDown}
                 onFocus={this.handleFocus}
                 onBlur={this.handleBlur}
+                onBlurCapture={this.handleBlurCapture}
+                onFocusCapture={this.handleFocusCapture}
                 tabIndex={0}
             >
                 {titleContent ? titleContent : genericContent(this.props)}
                 <div ref="menu" {...menuAria} className={menuClasses}
                     role="menu"
                     onMouseDown={this.captureMouseEvent}
-                    onClick={this.captureMouseEvent}
+                    onClick={this.handleItemClick}
                 >
                     {children}
                 </div>
@@ -420,60 +437,6 @@ export class ExpandableMenu extends UIElement<ExpandableMenuProps, ExpandableMen
     }
 }
 
-export interface SelectProps {
-    options: SelectItem[];
-    onChange?: (value: string) => void;
-    "aria-label"?: string;
-    label?: string;
-}
-
-export interface SelectState {
-    selected?: string;
-}
-
-export interface SelectItem {
-    value: string | number;
-    display?: string;
-}
-
-export class Select extends UIElement<SelectProps, SelectState> {
-    constructor(props: SelectProps) {
-        super(props);
-        const { options } = props;
-        this.state = {
-            selected: options[0] && (options[0].value + "")
-        };
-    }
-
-    handleOnChange = (ev: React.ChangeEvent<HTMLSelectElement>) => {
-        const { onChange } = this.props;
-        this.setState({
-            selected: ev.target.value
-        });
-
-        if (onChange) {
-            onChange(ev.target.value);
-        }
-    }
-
-    render() {
-        const { options, label, "aria-label": ariaLabel } = this.props;
-        const { selected } = this.state;
-
-        return (<div>
-            { label && `${label} ` }
-            <select value={selected} className="ui dropdown" onChange={this.handleOnChange} aria-label={ariaLabel} >
-                {options.map(opt =>
-                    opt && <option
-                        aria-selected={selected === opt.value}
-                        value={opt.value}
-                        key={opt.value}
-                    >{opt.display || opt.value}</option>
-                )}
-            </select>
-        </div>);
-    }
-}
 
 ///////////////////////////////////////////////////////////
 ////////////             Items                /////////////
@@ -548,6 +511,7 @@ export interface ButtonProps extends UiProps, TooltipUIProps {
     id?: string;
     title?: string;
     ariaLabel?: string;
+    ariaDisabled?: boolean;
     ariaExpanded?: boolean;
     onClick?: (e: React.MouseEvent<HTMLElement>) => void;
     disabled?: boolean;
@@ -576,6 +540,7 @@ export class Button extends StatelessUIElement<ButtonProps> {
             tabIndex={this.props.tabIndex || 0}
             aria-label={this.props.ariaLabel}
             aria-expanded={this.props.ariaExpanded}
+            aria-disabled={this.props.ariaDisabled ?? disabled}
             onClick={this.props.onClick}
             onKeyDown={this.props.onKeyDown}
             autoFocus={this.props.autoFocus}
@@ -655,19 +620,31 @@ export function helpIconLink(url: string, title: string) {
 
 export class Field extends data.Component<{
     label?: string;
+    labelWrapper?: React.ElementType;
+    visuallyHidden?: boolean;
     children?: any;
-    ariaLabel?: string;
     htmlFor?: string;
 }, {}> {
     renderCore() {
         return (
             <div className="field">
-                {this.props.label ? <label htmlFor={!this.props.ariaLabel ? this.props.htmlFor : undefined}>{this.props.label}</label> : null}
-                {this.props.ariaLabel && this.props.htmlFor ? (<label htmlFor={this.props.htmlFor} className="accessible-hidden">{this.props.ariaLabel}</label>) : ""}
+                <LabelWrapper
+                    wrapperType={this.props.labelWrapper}
+                >
+                    {this.props.label && this.props.htmlFor && (<label className={classList(this.props.visuallyHidden ? "accessible-hidden" : "")} htmlFor={this.props.htmlFor}>{this.props.label}</label>)}
+                </LabelWrapper>
                 {this.props.children}
             </div>
         );
     }
+}
+
+const LabelWrapper = ({wrapperType, children}: {wrapperType?: React.ElementType, children: React.ReactNode}) => {
+    if (wrapperType) {
+        const Wrapper = wrapperType;
+        return <Wrapper>{children}</Wrapper>
+    }
+    return <>{children}</>
 }
 
 ///////////////////////////////////////////////////////////
@@ -676,7 +653,9 @@ export class Field extends data.Component<{
 
 export interface InputProps {
     label?: string;
+    labelWrapper?: React.ElementType
     inputLabel?: string;
+    visuallyHiddenLabel?: boolean;
     class?: string;
     value?: string;
     error?: string;
@@ -690,7 +669,6 @@ export interface InputProps {
     copy?: boolean;
     selectOnClick?: boolean;
     id?: string;
-    ariaLabel?: string;
     autoFocus?: boolean;
     autoComplete?: boolean;
     selectOnMount?: boolean;
@@ -783,14 +761,14 @@ export class Input extends data.Component<InputProps, InputState> {
 
     renderCore() {
         const p = this.props;
-        const { copy, error, ariaLabel, id, label, inputLabel, lines, autoFocus, placeholder, readOnly, autoComplete } = p;
+        const { copy, error, id, label, labelWrapper, inputLabel, lines, autoFocus, placeholder, readOnly, autoComplete, visuallyHiddenLabel } = p;
         const { value, copied } = this.state;
         const copyBtn = copy && document.queryCommandSupported('copy')
             ? <Button className={`ui right labeled ${copied ? "green" : "primary"} icon button`} text={copied ? lf("Copied!") : lf("Copy")} icon="copy" onClick={this.copy} />
             : null;
 
         return (
-            <Field ariaLabel={ariaLabel} htmlFor={id} label={label}>
+            <Field htmlFor={id} label={label} visuallyHidden={visuallyHiddenLabel} labelWrapper={labelWrapper}>
                 <div className={"ui input" + (p.inputLabel ? " labelled" : "") + (copy ? " action fluid" : "") + (p.disabled ? " disabled" : "")}>
                     {inputLabel ? (<div className="ui label">{inputLabel}</div>) : ""}
                     {!lines || lines == 1 ? <input
@@ -874,11 +852,12 @@ export interface IconProps extends UiProps {
     icon?: string;
     onClick?: () => void;
     onKeyDown?: () => void;
+    fontAwesome?: boolean;
 }
 
 export const Icon: React.FunctionComponent<IconProps> = (props: IconProps) => {
-    const { icon, className, onClick, onKeyDown, children, ...rest } = props;
-    return <i className={`icon ${icon} ${className ? className : ''}`}
+    const { icon, className, onClick, onKeyDown, fontAwesome, children, ...rest } = props;
+    return <i className={`${fontAwesome ? '' : 'icon '}${icon} ${className ? className : ''}`}
         onClick={onClick}
         onKeyDown={onKeyDown || fireClickOnEnter}
         aria-hidden={true} role="presentation" {...rest}>
@@ -1155,6 +1134,7 @@ export interface ModalProps extends ReactModal.Props {
     longer?: boolean;
 
     header?: string;
+    headerFn?: () => string;
     headerIcon?: string;
     headerClass?: string;
     description?: string;
@@ -1275,12 +1255,14 @@ export class Modal extends data.Component<ModalProps, ModalState> {
     renderCore() {
         const { isOpen, size, longer, basic, className,
             onClose, closeIcon, children, onKeyDown,
-            header, headerIcon, headerClass, headerActions, helpUrl, description,
+            header, headerFn, headerIcon, headerClass, headerActions, helpUrl, description,
             closeOnDimmerClick, closeOnDocumentClick, closeOnEscape,
             shouldCloseOnEsc, shouldCloseOnOverlayClick, shouldFocusAfterRender, overlayClassName, ...rest } = this.props;
         const { marginTop, scrolling, mountClasses } = this.state;
         const isFullscreen = size == 'fullscreen';
         const showBack = isFullscreen && !!closeIcon;
+
+        const resolvedHeader = headerFn ? headerFn() : header ? header : undefined;
 
         const classes = cx([
             'ui',
@@ -1292,13 +1274,13 @@ export class Modal extends data.Component<ModalProps, ModalState> {
             'modal transition visible active',
             className
         ]);
-        const hc = this.getData<boolean>(auth.HIGHCONTRAST);
+        const hc = ThemeManager.isCurrentThemeHighContrast();
         const portalClassName = cx([
             hc ? 'hc' : '',
             mountClasses
         ])
         const aria = {
-            labelledby: header ? this.id + 'title' : undefined,
+            labelledby: resolvedHeader ? this.id + 'title' : undefined,
             describedby: (!isFullscreen && description) ? this.id + 'description' : this.id + 'desc'
         }
         const customStyles = {
@@ -1318,9 +1300,9 @@ export class Modal extends data.Component<ModalProps, ModalState> {
             style={customStyles}
             role="dialog"
             aria={aria} {...rest}>
-            {header || showBack || helpUrl ? <div id={this.id + 'title'} className={"header " + (headerClass || "")}>
+            {resolvedHeader || showBack || helpUrl ? <div id={this.id + 'title'} className={"header " + (headerClass || "")}>
                 {headerIcon && <Icon icon={headerIcon} />}
-                <h3 className="header-title" style={{ margin: `0 ${helpUrl ? '-20rem' : '0'} 0 ${showBack ? '-20rem' : '0'}` }}>{header}</h3>
+                <h3 className="header-title" style={{ margin: `0 ${helpUrl ? '-20rem' : '0'} 0 ${showBack ? '-20rem' : '0'}` }}>{resolvedHeader}</h3>
                 {showBack ? <div className="header-close">
                     <Button className="back-button large" title={lf("Go back")} onClick={onClose} tabIndex={0} onKeyDown={fireClickOnEnter}>
                         <Icon icon="arrow left" />
@@ -1329,7 +1311,7 @@ export class Modal extends data.Component<ModalProps, ModalState> {
                 </div> : undefined}
                 {helpUrl ?
                     <div className="header-help">
-                        <a className={`ui icon help-button`} href={helpUrl} target="_docs" role="link" aria-label={lf("Help on {0} dialog", header)} title={lf("Help on {0} dialog", header)}>
+                        <a className={`ui icon help-button`} href={helpUrl} target="_docs" role="link" aria-label={lf("Help on {0} dialog", resolvedHeader)} title={lf("Help on {0} dialog", resolvedHeader)}>
                             <Icon icon="help" />
                         </a>
                     </div>

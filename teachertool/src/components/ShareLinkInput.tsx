@@ -5,6 +5,9 @@ import { AppStateContext } from "../state/appStateContext";
 import { classList } from "react-common/components/util";
 import { Input } from "react-common/components/controls/Input";
 import { loadProjectMetadataAsync } from "../transforms/loadProjectMetadataAsync";
+import { Strings, Ticks } from "../constants";
+import { getChecklistHash, makeToast } from "../utils";
+import { showToast } from "../transforms/showToast";
 
 interface IProps {}
 
@@ -20,15 +23,30 @@ export const ShareLinkInput: React.FC<IProps> = () => {
         setIconVisible(!!shareId && !(shareId === projectMetadata?.shortid || shareId === projectMetadata?.persistId));
     }, [text, projectMetadata?.shortid, projectMetadata?.persistId]);
 
+    // If project metadata is set outside of this component, update the text to the project ID.
+    useEffect(() => {
+        const id = projectMetadata?.shortid || projectMetadata?.persistId;
+        if (!text && id) {
+            const url = new URL(id, pxt.Util.getHomeUrl()).toString();
+            setText(url);
+        }
+    }, [projectMetadata?.shortid, projectMetadata?.persistId]);
+
     const onTextChange = (str: string) => {
         setText(str);
     };
 
     const onEnterKey = useCallback(() => {
         const shareId = pxt.Cloud.parseScriptId(text);
-        if (!!shareId && !(shareId === projectMetadata?.shortid || shareId === projectMetadata?.persistId)) {
-            loadProjectMetadataAsync(text, shareId);
+        if (!shareId) {
+            pxt.tickEvent(Ticks.LoadProjectInvalid);
+            showToast(makeToast("error", Strings.InvalidShareLink));
+            return;
         }
+
+        const isReload: boolean = shareId === projectMetadata?.shortid || shareId === projectMetadata?.persistId;
+        pxt.tickEvent(Ticks.LoadProjectFromInput, { checklistHash: getChecklistHash(teacherTool.checklist), isReload: isReload.toString() });
+        loadProjectMetadataAsync(text, shareId, true);
     }, [text, projectMetadata?.shortid, projectMetadata?.persistId]);
 
     const icon = useMemo(() => {
@@ -49,6 +67,7 @@ export const ShareLinkInput: React.FC<IProps> = () => {
                 preserveValueOnBlur={true}
                 autoComplete={false}
                 handleInputRef={setInputRef}
+                initialValue={text}
             ></Input>
         </div>
     );

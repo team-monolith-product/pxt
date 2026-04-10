@@ -139,19 +139,19 @@ namespace ts.pxtc {
     ]
 
     export function jsEmit(bin: Binary, cres: CompileResult) {
-        let jssource = "(function (ectx) {\n'use strict';\n"
+        let jsheader = "(function (ectx) {\n'use strict';\n"
 
         for (let n of evalIfaceFields) {
-            jssource += `const ${n} = ectx.${n};\n`
+            jsheader += `const ${n} = ectx.${n};\n`
         }
 
-        jssource += `const __this = runtime;\n`
-        jssource += `const pxtrt = pxsim.pxtrt;\n`
+        jsheader += `const __this = runtime;\n`
+        jsheader += `const pxtrt = pxsim.pxtrt;\n`
 
-        jssource += `let yieldSteps = 1;\n`
-        jssource += `ectx.setupYield(function() { yieldSteps = 100; })\n`
+        jsheader += `let yieldSteps = 1;\n`
+        jsheader += `ectx.setupYield(function() { yieldSteps = 100; })\n`
 
-        jssource += "pxsim.setTitle(" + JSON.stringify(bin.getTitle()) + ");\n"
+        let jssource = "pxsim.setTitle(" + JSON.stringify(bin.getTitle()) + ");\n"
         let cfg: pxt.Map<number> = {}
         let cfgKey: pxt.Map<number> = {}
         for (let ce of cres.configData || []) {
@@ -177,6 +177,9 @@ namespace ts.pxtc {
             if (p.cachedJS) {
                 curr = p.cachedJS
                 cachedLen += curr.length
+                for (const hexlit of Object.keys(p.cachedJSHexLiterals)) {
+                    bin.hexlits[hexlit] = p.cachedJSHexLiterals[hexlit];
+                }
             } else {
                 curr = irToJS(bin, p)
                 newLen += curr.length
@@ -191,6 +194,12 @@ namespace ts.pxtc {
             jssource += `\nconst breakpoints = setupDebugger(${cres.breakpoints.length}, [${bin.globals.filter(c => c.isUserVariable).map(c => `"${c.uniqueName()}"`).join(",")}])\n`
 
         jssource += `\nreturn ${bin.procs[0] ? bin.procs[0].label() : "null"}\n})\n`
+
+        for (const hexlit of Object.keys(bin.hexlits)) {
+            jsheader += bin.hexlits[hexlit];
+        }
+
+        jssource = jsheader + jssource;
 
         const total = jssource.length
         const perc = (n: number) => ((100 * n) / total).toFixed(2) + "%"
@@ -209,7 +218,6 @@ namespace ts.pxtc {
         let exprStack: ir.Expr[] = []
         let maxStack = 0
         let localsCache: pxt.Map<boolean> = {}
-        let hexlits = ""
 
         writeRaw(`
 function ${proc.label()}(s) {
@@ -310,7 +318,6 @@ switch (step) {
             writeRaw(`${proc.label()}.continuations = [ ${asyncContinuations.join(",")} ]`)
 
         writeRaw(fnctor(proc.label() + "_mk", proc.label(), maxStack, Object.keys(localsCache)))
-        writeRaw(hexlits)
 
         proc.cachedJS = resText
 
@@ -426,12 +433,15 @@ function ${id}(s) {
                     else if (e.data === null) return "null"
                     else if (e.data === undefined) return "undefined"
                     else if (typeof e.data == "number") return e.data + ""
+                    else if (typeof e.data == "string") return `"${e.data}"`
                     else throw oops("invalid data: " + typeof e.data);
                 case EK.PointerLiteral:
                     if (e.ptrlabel()) {
                         return e.ptrlabel().lblId + "";
                     } else if (e.hexlit() != null) {
-                        hexlits += `const ${e.data} = pxsim.BufferMethods.createBufferFromHex("${e.hexlit()}")\n`
+                        const lit = `const ${e.data} = pxsim.BufferMethods.createBufferFromHex("${e.hexlit()}")\n`;
+                        proc.cachedJSHexLiterals[e.data] = lit;
+                        bin.hexlits[e.data] = lit;
                         return e.data;
                     } else if (typeof e.jsInfo == "string") {
                         return e.jsInfo;
@@ -455,7 +465,7 @@ function ${id}(s) {
 
         // result in R0
         function emitExpr(e: ir.Expr): void {
-            //console.log(`EMITEXPR ${e.sharingInfo()} E: ${e.toString()}`)
+            //pxt.log(`EMITEXPR ${e.sharingInfo()} E: ${e.toString()}`)
 
             switch (e.exprKind) {
                 case EK.JmpValue:
@@ -493,16 +503,19 @@ function ${id}(s) {
             }
         }
 
+        function vTableRef(info: ClassInfo) {
+            return `${info.id}_VT`
+        }
+
         function checkSubtype(info: ClassInfo, r0 = "r0") {
-            const vt = `${info.id}_VT`
-            return `checkSubtype(${r0}, ${vt})`
+            return `checkSubtype(${r0}, ${vTableRef(info)})`
         }
 
         function emitInstanceOf(info: ClassInfo, tp: string, r0 = "r0") {
             if (tp == "bool")
                 write(`r0 = ${checkSubtype(info)};`)
             else if (tp == "validate") {
-                write(`if (!${checkSubtype(info, r0)}) failedCast(${r0});`)
+                write(`if (!${checkSubtype(info, r0)}) failedCast(${r0}, ${vTableRef(info)});`)
             } else {
                 U.oops()
             }
@@ -607,7 +620,7 @@ function ${id}(s) {
                 write(`${frameRef} = ${id}(s);`)
             }
 
-            //console.log("PROCCALL", topExpr.toString())
+            //pxt.log("PROCCALL", topExpr.toString())
             topExpr.args.forEach((a, i) => {
                 let arg = `arg${i}`
                 if (isLambda) {

@@ -1,23 +1,83 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { Transform, PassThrough } = require("stream");
+const { minify } = require("terser");
 
 const gulp = require("gulp");
 const ts = require("gulp-typescript");
 const merge = require("merge-stream");
 const concat = require("gulp-concat");
-const header = require("gulp-header");
 const replace = require("gulp-replace");
 const ju = require("./jakeutil");
+const yargs = require('yargs');
 
 const exec = ju.exec;
 const rimraf = ju.rimraf;
+const argv = yargs.argv;
 
 const isWin32 = os.platform() === "win32";
 
 const clean = () => rimraf("built").then(() => rimraf("temp"));
 const update = () => exec("git pull", true).then(() => exec("npm install", true))
 const noop = () => Promise.resolve();
+
+function prependHeader(headerText) {
+    const headerBuffer = Buffer.from(headerText);
+
+    return new Transform({
+        objectMode: true,
+        transform(file, _enc, callback) {
+            if (file.isNull()) {
+                return callback(null, file);
+            }
+
+            if (file.isBuffer && file.isBuffer()) {
+                file.contents = Buffer.concat([headerBuffer, file.contents]);
+                return callback(null, file);
+            }
+
+            if (file.isStream && file.isStream()) {
+                const combined = new PassThrough();
+                combined.write(headerBuffer);
+                file.contents.on('error', err => combined.emit('error', err));
+                file.contents.pipe(combined, { end: true });
+                file.contents = combined;
+                return callback(null, file);
+            }
+
+            return callback(null, file);
+        }
+    });
+}
+
+function terserMinifyTransform(options = {}) {
+    return new Transform({
+        objectMode: true,
+        transform(file, _enc, callback) {
+            if (file.isNull()) {
+                return callback(null, file);
+            }
+
+            if (file.isStream && file.isStream()) {
+                return callback(new Error("Streaming not supported for terserMinifyTransform"));
+            }
+
+            const source = file.contents.toString("utf8");
+
+            minify(source, options)
+                .then(result => {
+                    if (!result || typeof result.code !== "string") {
+                        throw new Error("Terser produced no output");
+                    }
+
+                    file.contents = Buffer.from(result.code, "utf8");
+                    callback(null, file);
+                })
+                .catch(err => callback(err));
+        }
+    });
+}
 
 const SUB_WEBAPPS = require("./cli/webapps-config.json").webapps;
 
@@ -69,7 +129,7 @@ const pxtworker = () => gulp.src([
     "built/pxtpy.js"
 ])
     .pipe(concat("pxtworker.js"))
-    .pipe(header(`"use strict";\n`))
+    .pipe(prependHeader(`"use strict";\n`))
     .pipe(gulp.dest("built/web"));
 
 const pxtembed = () => gulp.src([
@@ -94,13 +154,20 @@ const buildpxtjs = () => gulp.src([
     "built/cli.js"
 ])
     .pipe(concat("pxt.js"))
-    .pipe(header(`
+    .pipe(prependHeader(`
         "use strict";
         // make sure TypeScript doesn't overwrite our module.exports
         global.savedModuleExports = module.exports;
         module.exports = null;
     `))
     .pipe(gulp.dest("built"));
+
+const pxtrcdeps = () => gulp.src([
+    "node_modules/dompurify/dist/purify.min.js",
+])
+    .pipe(concat("pxtrcdeps.js"))
+    .pipe(gulp.dest("built/web"));
+
 
 const copySubappsConfig = () => gulp.src("cli/webapps-config.json")
     .pipe(gulp.dest("built"));
@@ -122,13 +189,13 @@ function initWatch() {
         gulp.parallel(pxtblocks, pxteditor, pxtservices),
         gulp.parallel(pxtrunner, cli, pxtcommon),
         gulp.parallel(updatestrings, browserifyEmbed),
-        gulp.parallel(pxtjs, pxtdts, pxtapp, pxtworker, pxtembed),
+        gulp.parallel(pxtjs, pxtdts, pxtapp, pxtworker, pxtembed, pxtrcdeps),
         targetjs,
         reactCommon,
         webapp,
         browserifyWebapp,
         browserifyAssetEditor,
-        gulp.parallel(semanticjs, copyJquery, copyWebapp, copySemanticFonts, copyMonaco),
+        gulp.parallel(semanticjs, copyJquery, copyMarked, copySmoothie, copyWebapp, copySemanticFonts, copyMonaco),
         notifyBuildComplete
     ];
 
@@ -179,7 +246,7 @@ const targetjs = () => exec("node built/pxt.js buildtarget", true);
 
 const buildcss = () => exec("node built/pxt.js buildcss", true);
 
-const pxtTravis = () => exec("node built/pxt.js travis", true);
+const pxtTravis = () => exec(`node built/pxt.js travis ${argv.publish ? "--publish" : ""}`, true);
 
 function compileTsProject(dirname, destination, useOutdir, filename) {
     if (!destination) destination = "built";
@@ -194,10 +261,23 @@ function compileTsProject(dirname, destination, useOutdir, filename) {
     let tsResult = tsProject.src()
         .pipe(tsProject());
 
-    return merge(
-        tsResult.js.pipe(gulp.dest(destination)),
-        tsResult.dts.pipe(gulp.dest(destination))
-    );
+    const outputStreams = [];
+
+    if (tsResult.js) {
+        outputStreams.push(tsResult.js);
+    }
+
+    if (tsResult.dts) {
+        outputStreams.push(tsResult.dts);
+    }
+
+    const mergedOutput = outputStreams.length > 1 ? merge(...outputStreams) : outputStreams[0];
+
+    if (!mergedOutput) {
+        return Promise.resolve();
+    }
+
+    return mergedOutput.pipe(gulp.dest(destination));
 }
 
 // TODO: Copied from Jakefile; should be async
@@ -228,6 +308,7 @@ function updatestrings() {
         "pxtpy",
         "pxtsim",
         "webapp/src",
+        "react-common"
     ], true);
 }
 
@@ -256,7 +337,7 @@ function buildStrings(out, rootPaths, recursive) {
                 return;
 
             while (true) {
-                let newLine = line.replace(/\blf(_va)?\s*\(\s*(.*)/, (all, a, args) => {
+                let newLine = line.replace(/\b(?:blf|(?:lf(_va)?))\s*\(\s*(.*)/, (all, a, args) => {
                     let m = /^("([^"]|(\\"))+")\s*[\),]/.exec(args)
                     if (m) {
                         try {
@@ -336,6 +417,14 @@ function runUglify() {
     return Promise.resolve();
 }
 
+async function inlineBlocklySourcemaps() {
+    if (process.env.PXT_ENV === 'production') {
+        return;
+    }
+
+    return exec("node ./scripts/inlineBlocklySourceMaps.js");
+}
+
 
 
 /********************************************************
@@ -363,6 +452,18 @@ const copyJquery = () => gulp.src("node_modules/jquery/dist/jquery.min.js")
     .pipe(concat("jquery.js"))
     .pipe(gulp.dest("built/web"));
 
+const copyMarked = () =>
+    gulp.src("node_modules/marked/lib/marked.umd.js")
+        .pipe(concat("marked.min.js"))
+        .pipe(gulp.dest("built/web/marked"))
+        .pipe(gulp.dest("webapp/public/marked"));
+
+const copySmoothie = () =>
+    gulp.src("node_modules/smoothie/smoothie.js")
+        .pipe(terserMinifyTransform())
+        .pipe(concat("smoothie_compressed.js"))
+        .pipe(gulp.dest("webapp/public/smoothie"));
+
 const copyWebapp = () =>
     gulp.src([
         "node_modules/@microsoft/applicationinsights-web/browser/ai.2.min.js",
@@ -381,8 +482,10 @@ const copyWebapp = () =>
 const copySemanticFonts = () => gulp.src("node_modules/semantic-ui-less/themes/default/assets/fonts/*")
     .pipe(gulp.dest("built/web/fonts"))
 
+// NOTE: Uglifyify no longer runs here because it crashes on modern syntax emitted in
+// production builds; minification is handled later in runUglify via Terser.
 const execBrowserify = (entryPoint, outfile) => process.env.PXT_ENV == 'production' ?
-    exec(`node node_modules/browserify/bin/cmd ${entryPoint} -g [ envify --NODE_ENV production ] -g [ uglifyify --ignore '**/node_modules/@blockly/**' ] -o ${outfile}`) :
+    exec(`node node_modules/browserify/bin/cmd ${entryPoint} -g [ envify --NODE_ENV production ] -o ${outfile}`) :
     exec(`node node_modules/browserify/bin/cmd ${entryPoint} -o ${outfile} --debug`);
 
 const browserifyWebapp = () => execBrowserify("./built/webapp/src/app.js", "./built/web/main.js");
@@ -441,7 +544,7 @@ const buildSVGIcons = () => {
 }
 
 const copyBlocklyMedia = () =>
-    gulp.src("node_modules/blockly/media/*")
+    gulp.src("node_modules/blockly/media/*", { encoding: false })
     .pipe(gulp.dest("webapp/public/blockly/media"))
 
 
@@ -539,7 +642,7 @@ function createWebappTasks(root, outname) {
                         .pipe(concat(`${outname}.html`))
                         .pipe(gulp.dest("webapp/public")));
 
-    const result = gulp.series(cleanWebapp, buildWebapp, gulp.series(copyWebappCss, copyWebappJs, copyWebappHtml));
+    const result = gulp.series(cleanWebapp, pxtrcdeps, buildWebapp, gulp.series(copyWebappCss, copyWebappJs, copyWebappHtml));
 
     exports[outname] = result;
 
@@ -701,11 +804,11 @@ function testTask(testFolder, testFile, additionalFiles) {
 
     const buildTestRunner = () => gulp.src(src)
         .pipe(concat("runner.js"))
-        .pipe(header(`
+        .pipe(prependHeader(`
             "use strict";
             // make sure TypeScript doesn't overwrite our module.exports
             global.savedModuleExports = module.exports;
-            module.exports = null;
+            module.exports = {};
         `))
         .pipe(gulp.dest('built/tests/' + testFolder));
 
@@ -733,14 +836,14 @@ function getMochaExecutable() {
 const buildAll = gulp.series(
     updatestrings,
     maybeUpdateWebappStrings(),
-    gulp.parallel(copyTypescriptServices, copyBlocklyMedia),
+    gulp.parallel(copyTypescriptServices, copyBlocklyMedia, inlineBlocklySourcemaps),
     gulp.parallel(pxtlib, pxtweb),
     gulp.parallel(pxtcompiler, pxtsim, backendutils),
     pxtpy,
     gulp.parallel(pxteditor, pxtblocks, pxtservices),
     gulp.parallel(pxtrunner, cli, pxtcommon),
     browserifyEmbed,
-    gulp.parallel(pxtjs, pxtdts, pxtapp, pxtworker, pxtembed),
+    gulp.parallel(pxtjs, pxtdts, pxtapp, pxtworker, pxtembed, pxtrcdeps),
     targetjs,
     reactCommon,
     gulp.parallel(buildcss, buildSVGIcons),
@@ -748,7 +851,7 @@ const buildAll = gulp.series(
     webapp,
     browserifyWebapp,
     browserifyAssetEditor,
-    gulp.parallel(semanticjs, copyJquery, copyWebapp, copySemanticFonts, copyMonaco),
+    gulp.parallel(semanticjs, copyJquery, copyMarked, copySmoothie, copyWebapp, copySemanticFonts, copyMonaco),
     buildBlocksTestRunner,
     gulp.parallel(browserifyBlocksTestRunner, browserifyBlocksPrep),
     runUglify
@@ -774,6 +877,8 @@ exports.pxtrunner = gulp.series(
     pxtembed,
 );
 
+exports.pxtweb = pxtweb;
+exports.pxtlib = pxtlib;
 exports.skillmapTest = testSkillmap;
 exports.updatestrings = updatestrings;
 exports.lint = lint

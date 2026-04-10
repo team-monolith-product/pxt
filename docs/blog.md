@@ -1,5 +1,78 @@
 # Microsoft MakeCode Blog
 
+## [MakeCode Arcade 2026 Update](/blog/arcade/update-feb-2026)
+
+February 13th, 2026 by [Jaqster](https://github.com/jaqster)
+
+Today we are pleased to release our 2026 MakeCode Arcade updates!
+
+**[Continue reading this blog post](/blog/arcade/update-feb-2026)**
+
+## [Interview with MakeCode Arcade Game Maker](/blog/arcade/code-ninjas)
+
+December 19, 2025 by [Jaqster](https://github.com/jaqster)
+
+As a great way to close out 2025, we sat down with MakeCode game developer and Code 
+Ninjas Sensei, Ethan Battaglia, to learn more about what it’s like learning and creating games with MakeCode Arcade. 
+
+**[Continue reading this blog post](/blog/arcade/code-ninjas)**
+
+## [Computer Science Education Week 2025](/blog/csed-week/csed-week-2025)
+
+November 12, 2025 by [Jaqster](https://github.com/jaqster)
+
+Computer Science Education Week is the time every year where schools all across the country shine a light on the importance of computing and technical education. This year it's all about Artificial Intelligence (AI) and some great activities are available during **Hour of AI**.
+
+**[Continue reading this blog post](/blog/csed-week/csed-week-2025)**
+
+## [MakeCode Minecraft 2025 Update](/blog/minecraft/2025-release)
+
+October 17, 2025 by [Jaqster](https://github.com/jaqster)
+
+The MakeCode fall update for Minecraft Education is here! Here’s a run-down of all the new features and improvements...
+
+**[Continue reading this blog post](/blog/minecraft/2025-release)**
+
+## [MakeCode for the micro:bit – 2025 Update](/blog/microbit/2025-update)
+
+July 18, 2025 by [Jaqster](https://github.com/jaqster)
+
+It's July and school's out in most of the world, so it's time for our annual MakeCode for the micro:bit update! As well as the 142 bugs that we fixed in this release, here's a rundown of the new features...
+
+**[Continue reading this blog post](/blog/microbit/2025-update)**
+
+## [Summer 2025 – MakeCode Professional Development](/blog/csp/summer-pd-2025)
+
+April 21, 2025 by [Jaqster](https://github.com/jaqster)
+
+April showers bring May flowers. For many of us, we are on the home stretch of the academic year already! Which is a good time to start planning for summer training and professional development opportunities.
+
+**[Continue reading this blog post](/blog/csp/summer-pd-2025)**
+
+## [MakeCode Arcade 2025 Update](/blog/arcade/update-mar-2025)
+
+March 24th, 2025 by [Jaqster](https://github.com/jaqster)
+
+Wow, I can't believe it's been 2 years since we shipped an update to MakeCode Arcade! We had over 800 open issues and many pending features...
+
+**[Continue reading this blog post](/blog/arcade/update-mar-2025)**
+
+## [Display shield extension/simulator for the micro:bit](/blog/microbit/display-shield)
+
+February 3, 2025 by [Thomas Ball](https://github.com/thomasjball)
+
+With the new display shield extension, you can now use Arcade shields for the micro:bit V2 in https://makecode.microbit.org/beta, with simulator support!
+
+**[Continue reading this blog post](/blog/microbit/display-shield)**
+
+## [MakeCode Code Evaluation Tool Beta](/blog/tools/code-eval-tool)
+
+January 14th, 2025 by [Jaqster](https://github.com/jaqster)
+
+The year 2025 is already off to a great start with the Beta release of a new tool for Teachers! **MakeCode Code Evaluation** is an online tool for teachers to help them understand and evaluate student programs.
+
+**[Continue reading this blog post](/blog/tools/code-eval-tool)**
+
 ## [MakeCode for the micro:bit 2024 Update](/blog/microbit/2024-update)
 
 September 4, 2024 by [Jaqster](https://github.com/jaqster)
