@@ -175,6 +175,7 @@ namespace ts.pxtc.decompiler {
         value: OutputNode;
         shadowType?: string;
         shadowMutation?: pxt.Map<string>;
+        emitShadowOnly?: boolean;
     }
 
     interface MutationChild {
@@ -574,8 +575,8 @@ ${output}</xml>`;
             };
         }
 
-        function compInfo(callInfo: pxtc.CallInfo): pxt.blocks.BlockCompileInfo {
-            const blockInfo = blocksInfo.apis.byQName[callInfo.qName];
+        function compInfo(callInfo: DecompilerCallInfo): pxt.blocks.BlockCompileInfo {
+            const blockInfo = blocksInfo.apis.byQName[callInfo.decompilerBlockAlias || callInfo.qName];
             if (blockInfo) {
                 return pxt.blocks.compileInfo(blockInfo);
             }
@@ -693,13 +694,19 @@ ${output}</xml>`;
         function isEventExpression(expr: ts.ExpressionStatement): boolean {
             if (expr.expression.kind == SK.CallExpression) {
                 const call = expr.expression as ts.CallExpression;
-                const callInfo = pxtInfo(call).callInfo;
+                const callInfo = pxtInfo(call).callInfo as DecompilerCallInfo;
                 if (!callInfo) {
                     error(expr)
                     return false;
                 }
-                const attributes = attrs(callInfo);
-                return attributes.blockId && !attributes.handlerStatement && !callInfo.isExpression && hasStatementInput(callInfo, attributes);
+                let attributes = attrs(callInfo);
+                if (!attributes.block) {
+                    if (env.aliasBlocks[callInfo.qName]) {
+                        callInfo.decompilerBlockAlias = env.aliasBlocks[callInfo.qName];
+                        attributes = attrs(callInfo);
+                    }
+                }
+                return attributes.blockId && !attributes.handlerStatement && !attributes.forceStatement && !callInfo.isExpression && hasStatementInput(callInfo, attributes);
             }
             return false;
         }
@@ -1192,7 +1199,7 @@ ${output}</xml>`;
                 return r;
             }
 
-            let value = U.htmlEscape(attributes.blockId || callInfo.qName);
+            let value = U.htmlEscape(attributes.blockId) || callInfo.qName;
 
             const [parent,] = getParent(n);
             const parentCallInfo: pxtc.CallInfo = parent && pxtInfo(parent).callInfo;
@@ -1289,11 +1296,8 @@ ${output}</xml>`;
                 const info = pxtInfo(call).callInfo;
                 const index = call.arguments.indexOf(n);
                 if (info && index !== -1) {
-                    const blockInfo = blocksInfo.apis.byQName[info.qName];
-                    if (blockInfo) {
-                        const comp = pxt.blocks.compileInfo(blockInfo);
-                        return comp && comp.parameters[index];
-                    }
+                    const comp = compInfo(info);
+                    return comp && comp.parameters[index];
                 }
             }
             return undefined;
@@ -2019,7 +2023,7 @@ ${output}</xml>`;
 
                         let isStatement = true;
 
-                        if (info.isExpression) {
+                        if (isOutputExpression(node, env)) {
                             const [parent] = getParent(node);
                             isStatement = parent && parent.kind === SK.ExpressionStatement;
                         }
@@ -2069,9 +2073,8 @@ ${output}</xml>`;
                 // }
             }
 
-            const args = paramList(info, env.blocks);
-            const api = env.blocks.apis.byQName[info.decompilerBlockAlias || info.qName];
-            const comp = pxt.blocks.compileInfo(api);
+            const args = paramList(info, env);
+            const comp = compInfo(info);
 
             const r = asExpression ? mkExpr(attributes.blockId, node)
                 : mkStmt(attributes.blockId, node);
@@ -2171,9 +2174,18 @@ ${output}</xml>`;
                                     r.mutation = {
                                         "numargs": arrow.parameters.length.toString()
                                     };
-                                    arrow.parameters.forEach((parameter, i) => {
-                                        r.mutation["arg" + i] = (parameter.name as ts.Identifier).text;
-                                    });
+
+                                    if (attributes.draggableParameters === "reporter") {
+                                        arrow.parameters.forEach((parameter, i) => {
+                                            const arg = paramDesc.handlerParameters[i];
+                                            addDraggableInput(arg, (parameter.name as ts.Identifier).text);
+                                        });
+                                    }
+                                    else {
+                                        arrow.parameters.forEach((parameter, i) => {
+                                            r.mutation["arg" + i] = (parameter.name as ts.Identifier).text;
+                                        });
+                                    }
                                 }
                                 else {
                                     arrow.parameters.forEach((parameter, i) => {
@@ -2189,7 +2201,7 @@ ${output}</xml>`;
                                 }
                             }
                             if (attributes.draggableParameters) {
-                                if (arrow.parameters.length < paramDesc.handlerParameters.length) {
+                                if (arrow.parameters.length < paramDesc.handlerParameters.length && !attributes.optionalVariableArgs) {
                                     for (let i = arrow.parameters.length; i < paramDesc.handlerParameters.length; i++) {
                                         const arg = paramDesc.handlerParameters[i];
                                         addDraggableInput(arg, arg.name);
@@ -2734,7 +2746,7 @@ ${output}</xml>`;
             }
 
             if (!asExpression) {
-                if (info.isExpression && !userFunction) {
+                if (isOutputExpression(n, env) && !userFunction) {
                     const alias = env.aliasBlocks[info.qName];
 
                     if (alias) {
@@ -2744,6 +2756,9 @@ ${output}</xml>`;
                         return Util.lf("No output expressions as statements");
                     }
                 }
+            }
+            else if (attributes.forceStatement || attributes.handlerStatement) {
+                return Util.lf("Function with forceStatement cannot be used as an expression.")
             }
 
             if (info.qName == "Math.pow") {
@@ -2765,7 +2780,7 @@ ${output}</xml>`;
             }
 
             const hasCallback = hasStatementInput(info, attributes);
-            if (hasCallback && !attributes.handlerStatement && !topLevel) {
+            if (hasCallback && !attributes.handlerStatement && !attributes.forceStatement && !topLevel) {
                 return Util.lf("Events must be top level");
             }
 
@@ -2783,9 +2798,9 @@ ${output}</xml>`;
                 attributes.blockId = builtin.blockId;
             }
 
-            const args = paramList(info, env.blocks);
+            const args = paramList(info, env);
             const api = env.blocks.apis.byQName[info.qName];
-            const comp = pxt.blocks.compileInfo(api);
+            const comp = env.compInfo(info);
             const totalDecompilableArgs = comp.parameters.length + (comp.thisParameter ? 1 : 0);
 
             if (attributes.imageLiteral || attributes.gridLiteral) {
@@ -2891,7 +2906,7 @@ ${output}</xml>`;
 
                 const predicate = p as (ts.FunctionExpression | ts.ArrowFunction);
 
-                if (isOutputExpression(predicate.body as ts.Expression)) {
+                if (isOutputExpression(predicate.body as ts.Expression, env)) {
                     return true;
                 }
 
@@ -3126,15 +3141,16 @@ ${output}</xml>`;
             if (checkIfWithinFunction(n)) {
                 return undefined;
             }
-            return Util.lf("Return statements can only be used within top-level function declarations");
+            return Util.lf("Return statements can only return values inside user-defined functions");
 
-            function checkIfWithinFunction(n: Node): boolean {
-                const enclosing = ts.getEnclosingBlockScopeContainer(n);
+            function checkIfWithinFunction(toCheck: Node): boolean {
+                const enclosing = ts.getEnclosingBlockScopeContainer(toCheck);
                 if (enclosing) {
                     switch (enclosing.kind) {
-                        case SK.SourceFile:
                         case SK.ArrowFunction:
                         case SK.FunctionExpression:
+                            return !n.expression;
+                        case SK.SourceFile:
                             return false;
                         case SK.FunctionDeclaration:
                             return enclosing.parent && enclosing.parent.kind === SK.SourceFile && !checkStatement(enclosing, env, false, true);
@@ -3359,7 +3375,7 @@ ${output}</xml>`;
                 const pInfo = pxtInfo(n);
                 if (isUndefined(n)) {
                     return Util.lf("Undefined is not supported in blocks");
-                } else if (isDeclaredElsewhere(n as Identifier) && !(pInfo.commentAttrs && pInfo.commentAttrs.blockIdentity && pInfo.commentAttrs.enumIdentity)) {
+                } else if (isDeclaredElsewhere(n as Identifier) && !(pInfo.commentAttrs && pInfo.commentAttrs.blockIdentity && pInfo.commentAttrs.enumIdentity && env.blocks.apis.byQName[pInfo.commentAttrs.blockIdentity])) {
                     return Util.lf("Variable is declared in another file");
                 } else {
                     return undefined;
@@ -3393,7 +3409,7 @@ ${output}</xml>`;
             if (callInfo) {
                 const attributes = env.attrs(callInfo);
                 const blockInfo = env.compInfo(callInfo);
-                if (attributes.blockIdentity || attributes.blockId === "lists_length" || attributes.blockId === "text_length") {
+                if ((attributes.blockIdentity && env.blocks.apis.byQName[attributes.blockIdentity]) || attributes.blockId === "lists_length" || attributes.blockId === "text_length") {
                     return undefined;
                 }
                 else if (callInfo.decl.kind === SK.EnumMember) {
@@ -3471,7 +3487,7 @@ ${output}</xml>`;
 
         const attributes = env.attrs(callInfo);
 
-        if (!attributes.blockIdentity) {
+        if (!attributes.blockIdentity || !env.blocks.apis.byQName[attributes.blockIdentity]) {
             return Util.lf("Tagged template does not have blockIdentity set");
         }
 
@@ -3590,14 +3606,13 @@ ${output}</xml>`;
         return node.kind === SK.ArrowFunction || node.kind === SK.FunctionExpression;
     }
 
-    function paramList(info: CallInfo, blocksInfo: BlocksInfo) {
+    function paramList(info: CallInfo, env: DecompilerEnv) {
         const res: DecompileArgument[] = [];
-        const sym = blocksInfo.apis.byQName[info.qName];
+        const sym = env.blocks.apis.byQName[info.qName];
 
         if (sym) {
-            const attributes = blocksInfo.apis.byQName[info.qName].attributes;
-            const comp = pxt.blocks.compileInfo(sym);
-            const builtin = pxt.blocks.builtinFunctionInfo[info.qName]
+            const attributes = env.blocks.apis.byQName[info.qName].attributes;
+            const comp = env.compInfo(info);
             let offset = attributes.imageLiteral ? 1 : 0;
 
             if (comp.thisParameter) {
@@ -3680,7 +3695,7 @@ ${output}</xml>`;
         });
     }
 
-    function isOutputExpression(expr: ts.Expression): boolean {
+    function isOutputExpression(expr: ts.Expression, env: DecompilerEnv): boolean {
         switch (expr.kind) {
             case SK.BinaryExpression: {
                 const tk = (expr as ts.BinaryExpression).operatorToken.kind;
@@ -3697,7 +3712,8 @@ ${output}</xml>`;
             case SK.CallExpression: {
                 const callInfo: pxtc.CallInfo = pxtc.pxtInfo(expr).callInfo
                 assert(!!callInfo);
-                return callInfo.isExpression;
+                const attrs = env.attrs(callInfo);
+                return callInfo.isExpression && !attrs.forceStatement && !attrs.handlerStatement;
             }
             case SK.Identifier:
             case SK.ParenthesizedExpression:
@@ -3929,6 +3945,10 @@ ${output}</xml>`;
     }
 
     function shouldEmitShadowOnly(n: ValueNode) {
+        if (n.emitShadowOnly !== undefined) {
+            return n.emitShadowOnly;
+        }
+
         let emitShadowOnly = false;
 
         if (n.value.kind === "expr") {
@@ -3948,10 +3968,21 @@ ${output}</xml>`;
                     case "logic_boolean":
                     case "text":
                         emitShadowOnly = !n.shadowType;
-                        break
+                        break;
+                }
+            }
+
+            if (emitShadowOnly && value.inputs) {
+                for (const input of value.inputs) {
+                    if (!shouldEmitShadowOnly(input)) {
+                        emitShadowOnly = false;
+                        break;
+                    }
                 }
             }
         }
+
+        n.emitShadowOnly = emitShadowOnly;
 
         return emitShadowOnly;
     }

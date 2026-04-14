@@ -10,6 +10,8 @@ import { MutatorTypes } from "../legacyMutations";
 import { trackAllVariables } from "./variables";
 import { FieldTilemap, FieldTextInput } from "../fields";
 import { CommonFunctionBlock } from "../plugins/functions/commonFunctionMixin";
+import { getContainingFunction } from "../plugins/duplicateOnDrag";
+import { FUNCTION_DEFINITION_BLOCK_TYPE } from "../plugins/functions/constants";
 
 
 interface Rect {
@@ -107,16 +109,16 @@ function compileWorkspace(e: Environment, w: Blockly.Workspace, blockInfo: pxtc.
 
         const stmtsEnums: pxt.blocks.JsNode[] = [];
         e.enums.forEach(info => {
-            const models = w.getVariablesOfType(info.name);
+            const models = w.getVariableMap().getVariablesOfType(info.name);
             if (models && models.length) {
                 const members: [string, number][] = models.map(m => {
-                    const match = /^(\d+)([^0-9].*)$/.exec(m.name);
+                    const match = /^(\d+)([^0-9].*)$/.exec(m.getName());
                     if (match) {
                         return [match[2], parseInt(match[1])] as [string, number];
                     }
                     else {
                         // Someone has been messing with the XML...
-                        return [m.name, -1] as [string, number];
+                        return [m.getName(), -1] as [string, number];
                     }
                 });
 
@@ -156,9 +158,9 @@ function compileWorkspace(e: Environment, w: Blockly.Workspace, blockInfo: pxtc.
         });
 
         e.kinds.forEach(info => {
-            const models = w.getVariablesOfType("KIND_" + info.name);
+            const models = w.getVariableMap().getVariablesOfType("KIND_" + info.name);
             if (models && models.length) {
-                const userDefined = models.map(m => m.name).filter(n => info.initialMembers.indexOf(n) === -1);
+                const userDefined = models.map(m => m.getName()).filter(n => info.initialMembers.indexOf(n) === -1);
 
                 if (userDefined.length) {
                     stmtsEnums.push(pxt.blocks.mkGroup([
@@ -239,13 +241,25 @@ function blockKey(b: Blockly.Block) {
     };
 }
 
+export const AUTO_DISABLED_REASON = "pxt_automatic_disabled";
+
 function setChildrenEnabled(block: Blockly.Block, enabled: boolean) {
-    block.setEnabled(enabled);
+    block.setDisabledReason(!enabled, AUTO_DISABLED_REASON);
     // propagate changes
     const children = block.getDescendants(false);
     for (const child of children) {
-        child.setEnabled(enabled);
+        child.setDisabledReason(!enabled, AUTO_DISABLED_REASON);
     }
+}
+
+function clearDisabled(block: Blockly.Block) {
+    block.setDisabledReason(false, AUTO_DISABLED_REASON);
+
+    // for legacy projects, the disabled reason will be MANUALLY_DISABLED
+    block.setDisabledReason(false, Blockly.constants.MANUALLY_DISABLED);
+
+    // this is the reason for blocks that are disabled via Blockly.Events.disableOrphans
+    block.setDisabledReason(false, "ORPHANED_BLOCK");
 }
 
 function updateDisabledBlocks(e: Environment, allBlocks: Blockly.Block[], topBlocks: Blockly.Block[]) {
@@ -257,7 +271,7 @@ function updateDisabledBlocks(e: Environment, allBlocks: Blockly.Block[], topBlo
     }
 
     // unset disabled
-    allBlocks.forEach(b => b.setEnabled(true));
+    allBlocks.forEach(clearDisabled);
 
     // update top blocks
     const events: pxt.Map<Blockly.Block> = {};
@@ -278,9 +292,9 @@ function updateDisabledBlocks(e: Environment, allBlocks: Blockly.Block[], topBlo
         // multiple calls allowed
         if (b.type == ts.pxtc.ON_START_TYPE)
             flagDuplicate(ts.pxtc.ON_START_TYPE, b);
-        else if (isFunctionDefinition(b) || call && call.attrs.blockAllowMultiple && !call.attrs.handlerStatement) return;
+        else if (isFunctionDefinition(b) || call && call.attrs.blockAllowMultiple && !(call.attrs.handlerStatement || call.attrs.forceStatement)) return;
         // is this an event?
-        else if (call && call.hasHandler && !call.attrs.handlerStatement) {
+        else if (call && call.hasHandler && !(call.attrs.handlerStatement || call.attrs.forceStatement)) {
             // compute key that identifies event call
             // detect if same event is registered already
             const key = call.attrs.blockHandlerKey || callKey(e, b);
@@ -630,11 +644,20 @@ function compileControlsForOf(e: Environment, b: Blockly.Block, comments: string
     let bOf = getInputTargetBlock(e, b, "LIST");
     let bDo = getInputTargetBlock(e, b, "DO");
 
+    let listExpression: pxt.blocks.JsNode;
+
+    if (!bOf || bOf.type === "placeholder") {
+        listExpression = pxt.blocks.mkText("[0]");
+    }
+    else {
+        listExpression = compileExpression(e, bOf, comments);
+    }
+
     let binding = lookup(e, b, getLoopVariableField(e, b).getField("VAR").getText());
 
     return [
         pxt.blocks.mkText("for (let " + binding.escapedName + " of "),
-        compileExpression(e, bOf, comments),
+        listExpression,
         pxt.blocks.mkText(")"),
         compileStatements(e, bDo)
     ]
@@ -754,7 +777,20 @@ function compileEvent(e: Environment, b: Blockly.Block, stdfun: StdFunc, args: p
         argumentDeclaration = pxt.blocks.mkText(`function (${handlerArgs.join(", ")})`)
     }
 
-    return mkCallWithCallback(e, ns, stdfun.f, compiledArgs, body, argumentDeclaration, stdfun.isExtensionMethod);
+
+    let callNamespace = ns;
+    let callName = stdfun.f
+    if (stdfun.attrs.blockAliasFor) {
+        const aliased = e.blocksInfo.apis.byQName[stdfun.attrs.blockAliasFor];
+
+        if (aliased) {
+            callName = aliased.name;
+            callNamespace = aliased.namespace;
+        }
+    }
+
+
+    return mkCallWithCallback(e, callNamespace, callName, compiledArgs, body, argumentDeclaration, stdfun.isExtensionMethod);
 }
 
 function compileImage(e: Environment, b: Blockly.Block, frames: number, columns: number, rows: number, n: string, f: string, args?: pxt.blocks.JsNode[]): pxt.blocks.JsNode {
@@ -1128,7 +1164,24 @@ function compileFunctionCall(e: Environment, b: Blockly.Block, comments: string[
 function compileReturnStatement(e: Environment, b: Blockly.Block, comments: string[]): pxt.blocks.JsNode {
     const expression = getInputTargetBlock(e, b, "RETURN_VALUE");
 
-    if (expression && expression.type != "placeholder") {
+    const hasReturn = expression?.type !== "placeholder";
+
+    const parentFunction = getContainingFunction(b);
+    if (!parentFunction) {
+        e.diagnostics.push({
+            blockId: b.id,
+            message: lf("Return statements can only be used within function bodies.")
+        });
+    }
+    else if (hasReturn && parentFunction.type !== FUNCTION_DEFINITION_BLOCK_TYPE) {
+        e.diagnostics.push({
+            blockId: b.id,
+            message: lf("Return statements can only return values inside function definitions.")
+        });
+    }
+
+
+    if (hasReturn) {
         return pxt.blocks.mkStmt(pxt.blocks.mkText("return "), compileExpression(e, expression, comments));
     }
     else {

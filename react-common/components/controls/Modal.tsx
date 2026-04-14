@@ -3,6 +3,7 @@ import * as ReactDOM from "react-dom";
 import { classList, ContainerProps } from "../util";
 import { Button } from "./Button";
 import { FocusTrap } from "./FocusTrap";
+import { Link } from "./Link";
 
 export interface ModalAction {
     label: string;
@@ -60,9 +61,34 @@ export const Modal = (props: ModalProps) => {
         className
     );
 
+    const modalRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        const root = parentElement || document.body;
+        const parent = modalRef.current?.parentElement;
+
+        const hiddenSiblings: Element[] = [];
+
+        for (const child of root.children) {
+            if (child !== parent) {
+                if (!child.hasAttribute("aria-hidden") || child.getAttribute("aria-hidden") === "false") {
+                    (child as HTMLElement).setAttribute("aria-hidden", "true");
+                    hiddenSiblings.push(child);
+                }
+            }
+        }
+
+        return () => {
+            for (const child of hiddenSiblings) {
+                (child as HTMLElement).removeAttribute("aria-hidden");
+            }
+        };
+    }, [parentElement])
+
     return ReactDOM.createPortal(<FocusTrap className={classes} onEscape={closeClickHandler}>
         <div id={id}
             className="common-modal"
+            ref={modalRef}
             role={role || "dialog"}
             aria-hidden={ariaHidden}
             aria-label={ariaLabel}
@@ -86,19 +112,22 @@ export const Modal = (props: ModalProps) => {
                 </div>
                 {fullscreen && helpUrl &&
                     <div className="common-modal-help">
-                        <Button
-                            className="menu-button"
+                        <Link
+                            className="common-button menu-button"
                             title={lf("Help on {0} dialog", title)}
                             href={props.helpUrl}
-                            onClick={() => {}}
-                            rightIcon="fas fa-question"
-                        />
+                            target="_blank"
+                        >
+                            <span className="common-button-flex">
+                                <i className="fas fa-question" aria-hidden={true}/>
+                            </span>
+                        </Link>
                     </div>
                 }
                 {!fullscreen && !hideDismissButton &&
                     <div className="common-modal-close">
                         <Button
-                            className="menu-button inverted"
+                            className="menu-button"
                             onClick={closeClickHandler}
                             title={lf("Close")}
                             rightIcon="fas fa-times-circle"
@@ -127,5 +156,5 @@ export const Modal = (props: ModalProps) => {
                 </div>
             }
         </div>
-    </FocusTrap>, parentElement || document.getElementById("root") || document.body)
+    </FocusTrap>, parentElement || document.body)
 }

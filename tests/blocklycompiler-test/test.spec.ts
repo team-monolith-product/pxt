@@ -219,7 +219,7 @@ async function blockTestAsync(name: string) {
         plugins: {
             // 'blockDragger': pxtblockly.BlockDragger,
             'connectionChecker': DuplicateOnDragConnectionChecker,
-            'flyoutsVerticalToolbox': pxtblockly.VerticalFlyout
+            'flyoutsVerticalToolbox': pxtblockly.CachingFlyout
         },
         move: {
             scrollbars: true,
@@ -278,7 +278,7 @@ async function blockTestAsync(name: string) {
         console.log(compiledTs);
     }
 
-    chai.assert(compiledTs === baselineTs, "Compiled result did not match baseline: " + name + " " + res.source);
+    chai.expect(compiledTs).to.equal(baselineTs, "Compiled result did not match baseline: " + name + " " + res.source);
 }
 
 describe("blockly compiler", function () {
@@ -497,6 +497,10 @@ describe("blockly compiler", function () {
             blockTestAsync("return_statement").then(done, done);
         });
 
+        it("should handle return statements in event handlers", (done: () => void) => {
+            blockTestAsync("return_statement_outside_function").then(done, done);
+        });
+
         it("should handle functions that return values", (done: () => void) => {
             blockTestAsync("function_output").then(done, done);
         });
@@ -566,6 +570,10 @@ describe("blockly compiler", function () {
         it("should compile gridTemplate blocks to template strings", done => {
             blockTestAsync("grid_template_string").then(done, done);
         })
+
+        it ("should handle forceStatement blocks", done => {
+            blockTestAsync("force_statement").then(done, done);
+        })
     });
 
     describe("compiling expandable blocks", () => {
@@ -609,6 +617,14 @@ describe("blockly compiler", function () {
     describe("compiling events blocks", () => {
         it("should handle APIs where the handler's type uses the Action alias", done => {
             blockTestAsync("action_event").then(done, done);
+        });
+
+        it("should handle events with blockAliasFor set", done => {
+            blockTestAsync("event_block_alias_for").then(done, done);
+        });
+
+        it("should handle events with draggableParameters=reporter and optionalVariableArgs", done => {
+            blockTestAsync("variable_reporter_args").then(done, done);
         });
     })
 

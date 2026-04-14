@@ -13,6 +13,7 @@ import { dispatchChangeGalleryView, dispatchChangeSelectedAsset, dispatchUpdateU
 import { AssetPreview } from "./assetPreview";
 import { AssetPalette } from "./assetPalette";
 import { getBlocksEditor } from "../../app";
+import { getLabelForAssetType } from "../../assets";
 
 interface AssetDetail {
     name: string;
@@ -62,7 +63,7 @@ class AssetSidebarImpl extends React.Component<AssetSidebarProps, AssetSidebarSt
         const asset = this.props.asset;
         const details: AssetDetail[] = [];
         if (asset) {
-            details.push({ name: lf("Type"), value: getDisplayTextForAsset(asset.type) });
+            details.push({ name: lf("Type"), value: getLabelForAssetType(asset.type) });
 
             switch (asset.type) {
                 case pxt.AssetType.Image:
@@ -74,6 +75,9 @@ class AssetSidebarImpl extends React.Component<AssetSidebarProps, AssetSidebarSt
                     break;
                 case pxt.AssetType.Animation:
                     details.push({ name: lf("Size"), value: `${asset.frames[0].width} x ${asset.frames[0].height}` });
+                    break;
+                case pxt.AssetType.Json:
+                    details.push({ name: lf("Filename"), value: asset.fileName });
                     break;
             }
         }
@@ -95,12 +99,16 @@ class AssetSidebarImpl extends React.Component<AssetSidebarProps, AssetSidebarSt
 
         const project = pxt.react.getTilemapProject();
         project.pushUndo();
+        result = pxt.patchTemporaryAsset(this.props.asset, result, project);
+
+        if (result.meta.displayName && (result.type !== pxt.AssetType.Json || result.data)) {
+            result = project.updateAsset(result);
+        }
+
         if (!this.props.asset.meta?.displayName && result.meta.temporaryInfo) {
             getBlocksEditor().updateTemporaryAsset(result);
             pkg.mainEditorPkg().lookupFile(`this/${pxt.MAIN_BLOCKS}`).setContentAsync(getBlocksEditor().getCurrentSource());
         }
-
-        if (result.meta.displayName) project.updateAsset(result);
 
         this.props.dispatchChangeGalleryView(GalleryView.User);
         this.updateAssets().then(() => simulator.setDirty());
@@ -231,7 +239,7 @@ class AssetSidebarImpl extends React.Component<AssetSidebarProps, AssetSidebarSt
                     className="asset-editor-button"
                     leftIcon="icon trash"
                     onClick={this.showDeleteModal} />}
-                <Button className="teal asset-palette-button"
+                <Button className="tertiary asset-palette-button"
                     label={lf("Colors")}
                     title={lf("Open the color palette")}
                     ariaLabel={lf("Open the color palette")}
@@ -250,21 +258,6 @@ class AssetSidebarImpl extends React.Component<AssetSidebarProps, AssetSidebarSt
             </Modal>}
             {showPaletteModal && <AssetPalette onClose={this.hidePaletteModal} />}
         </div>
-    }
-}
-
-function getDisplayTextForAsset(type: pxt.AssetType) {
-    switch (type) {
-        case pxt.AssetType.Image:
-            return lf("Image");
-        case pxt.AssetType.Tile:
-            return lf("Tile");
-        case pxt.AssetType.Animation:
-            return lf("Animation");
-        case pxt.AssetType.Tilemap:
-            return lf("Tilemap");
-        case pxt.AssetType.Song:
-            return lf("Song");
     }
 }
 

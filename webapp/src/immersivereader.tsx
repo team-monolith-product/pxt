@@ -232,7 +232,8 @@ export async function launchImmersiveReaderAsync(content: string, tutorialOption
         onPreferencesChanged: (pref: string) => {
             auth.setImmersiveReaderPrefAsync(pref)
         },
-        preferences: userReaderPref
+        preferences: userReaderPref,
+        allowFullscreen: !pxt.appTarget.simulator?.headless
     }
 
     try {
@@ -290,7 +291,7 @@ export class ImmersiveReaderButton extends data.Component<ImmersiveReaderProps, 
     }
 
     render() {
-        return <div className='immersive-reader-button ui item' onClick={this.buttonClickHandler}
+        return <div className='immersive-reader-button ui item neutral' onClick={this.buttonClickHandler}
             aria-label={lf("Launch Immersive Reader")} role="button" onKeyDown={fireClickOnEnter} tabIndex={0}
             title={lf("Launch Immersive Reader")}/>
     }

@@ -4,14 +4,22 @@ import * as core from "./core";
 import * as toolbox from "./toolbox";
 import * as workspace from "./workspace";
 import * as data from "./data";
-import * as auth from "./auth";
-import { HELP_IMAGE_URI } from "../../pxteditor";
 import * as pxtblockly from "../../pxtblocks";
+import { HELP_IMAGE_URI } from "../../pxteditor";
+import { getBlockAsText } from "./toolboxHelpers";
+import { ThemeManager } from "../../react-common/components/theming/themeManager";
 
 import ISettingsProps = pxt.editor.ISettingsProps;
+import { classList } from "../../react-common/components/util";
 
 const DRAG_THRESHOLD = 5;
 const SELECTED_BORDER_WIDTH = 4;
+
+// Copied from toolbox.tsx
+const brandIcons: pxt.Map<string> = {
+    '\uf287': 'usb', '\uf368': 'accessible-icon', '\uf170': 'adn', '\uf1a7': 'pied-piper-pp', '\uf1b6': 'steam', '\uf294': 'bluetooth-b',
+    '\uf1d0': 'rebel', '\uf136': 'maxcdn', '\uf1aa': 'joomla', '\uf213': 'sellsy', '\uf20e': 'connectdevelop', '\uf113': 'github-alt'
+};
 
 interface BlockDragInfo {
     x: number;
@@ -38,6 +46,7 @@ export interface MonacoFlyoutState {
     selectedBlock?: string;
     hoverBlock?: string;
     hide?: boolean;
+    stayOpenOnDrag?: boolean;
 }
 
 export class MonacoFlyout extends data.Component<MonacoFlyoutProps, MonacoFlyoutState> {
@@ -82,11 +91,9 @@ export class MonacoFlyout extends data.Component<MonacoFlyoutProps, MonacoFlyout
         this.positionDragHandle();
     }
 
-    protected getBlockClickHandler = (name: string) => {
-        return () => {
-            pxt.tickEvent("monaco.toolbox.itemclick", undefined, { interactiveConsent: true });
-            this.setState({ selectedBlock: name != this.state.selectedBlock ? name : undefined });
-        };
+    focus() {
+        const firstFocusableElement = (this.refs.flyout as HTMLDivElement)?.querySelector<HTMLElement>("[tabindex='0']");
+        firstFocusableElement?.focus();
     }
 
     protected getBlockMouseOver = (name: string) => {
@@ -102,6 +109,8 @@ export class MonacoFlyout extends data.Component<MonacoFlyoutProps, MonacoFlyout
 
     protected getBlockDragStartHandler = (block: toolbox.BlockDefinition, snippet: string, color: string) => {
         return (e: any) => {
+            e.preventDefault();
+            e.stopPropagation();
             this.dragInfo = {
                 x: pxt.BrowserUtils.getClientX(e),
                 y: pxt.BrowserUtils.getClientY(e),
@@ -151,7 +160,7 @@ export class MonacoFlyout extends data.Component<MonacoFlyoutProps, MonacoFlyout
             dragBlock.style.left = `${pxt.BrowserUtils.getClientX(e)}px`;
             // For devices without PointerEvents (iOS < 13.0) use state to
             // hide the flyout rather than focusing the editor
-            this.setState({ hide: true });
+            this.setState({ hide: !this.state.stayOpenOnDrag });
         }
     }
 
@@ -174,18 +183,19 @@ export class MonacoFlyout extends data.Component<MonacoFlyoutProps, MonacoFlyout
                 // Next item
                 let nextSibling = target.nextElementSibling as HTMLElement;
                 if (target && nextSibling) {
-                    nextSibling.click();
                     nextSibling.focus();
                 }
             } else if (charCode == 38) { // UP
                 // Previous item
                 let prevSibling = target.previousElementSibling as HTMLElement;
                 if (target && prevSibling) {
-                    prevSibling.click();
                     prevSibling.focus();
                 }
             } else if ((charCode == 37 && !isRtl) || (charCode == 38 && isRtl)) { // (LEFT & LTR) or (RIGHT & RTL)
                 // Focus back to toolbox
+                this.setState({
+                    selectedBlock: undefined
+                })
                 this.props.moveFocusToParent();
             } else if (charCode == 27) { // ESCAPE
                 // Focus back to toolbox and close Flyout
@@ -200,6 +210,19 @@ export class MonacoFlyout extends data.Component<MonacoFlyoutProps, MonacoFlyout
                 });
             }
         }
+    }
+
+    private handleFocus = (name: string) => {
+        pxt.tickEvent("monaco.toolbox.itemclick", undefined, { interactiveConsent: true });
+        this.setState({
+            selectedBlock: name
+        });
+    }
+
+    private handleBlur = () => {
+        this.setState({
+            selectedBlock: undefined
+        });
     }
 
     protected getHelpButtonClickHandler = (group?: string) => {
@@ -232,7 +255,7 @@ export class MonacoFlyout extends data.Component<MonacoFlyoutProps, MonacoFlyout
     }
 
     protected getBlockStyle = (color: string) => {
-        const highContrast = this.getData<boolean>(auth.HIGHCONTRAST)
+        const highContrast = ThemeManager.isCurrentThemeHighContrast();
         return {
             backgroundColor: color,
             border: highContrast ? `2px solid ${color}` : "none",
@@ -253,48 +276,26 @@ export class MonacoFlyout extends data.Component<MonacoFlyoutProps, MonacoFlyout
     protected getBlockDescription(block: toolbox.BlockDefinition, params: pxtc.ParameterDesc[]): JSX.Element[] {
         let description = [];
         let compileInfo = pxt.blocks.compileInfo(block as pxtc.SymbolInfo);
-        let parts = block.attributes._def && block.attributes._def.parts;
-        if (block.attributes.parentBlock) {
-            const parent = block.attributes.parentBlock;
-            const parentBlockParts = [...parent.attributes._def.parts];
-            const overrideLocation = parentBlockParts.findIndex((part: any) => part.kind === "param" && part.name === block.attributes.toolboxParentArgument);
-            if (overrideLocation !== -1) {
-                parentBlockParts.splice(overrideLocation, 1, ...block.attributes._def.parts);
-                parts = parentBlockParts;
-            }
-        }
         let name = block.qName || block.name;
         const isPython = this.props.fileType == pxt.editor.FileType.Python;
 
-        if (parts) {
-            if (params &&
-                parts.filter((p: any) => p.kind == "param").length > params.length) {
-                // add empty param when first argument is "this"
-                params.unshift(null);
-            }
-            parts.forEach((part, i) => {
+        const blockAsText = getBlockAsText(block, params, isPython);
+        if (blockAsText?.parts?.length) {
+            blockAsText.parts?.forEach((part, i) => {
                 switch (part.kind) {
                     case "label":
-                        description.push(<span key={name + i}>{part.text}</span>);
+                        description.push(<span key={name + i}>{part.content}</span>);
                         break;
                     case "break":
                         description.push(<span key={name + i}>{" "}</span>);
                         break;
                     case "param":
-                        let actualParam = compileInfo?.definitionNameToParam[part.name];
-                        let val = actualParam?.defaultValue
-                            || part.varName
-                            || actualParam?.actualName
-                            || part.name
-                        if (isPython && actualParam?.defaultValue) {
-                            val = pxtc.tsSnippetToPySnippet(val);
-                        }
-                        description.push(<span className="argName" key={name + i}>{val}</span>);
+                        description.push(<span className="argName" key={name + i}>{part.content}</span>);
                         break;
                 }
-            })
+            });
         } else {
-            // if no blockdef found, use the snippet name
+            // if no parts found, use the snippet name
             description.push(<span key={name}>{this.getSnippetName(block) || block.name}</span>)
         }
 
@@ -380,11 +381,22 @@ export class MonacoFlyout extends data.Component<MonacoFlyoutProps, MonacoFlyout
         const description = block.attributes.jsDoc.replace(/``/g, '"')
             .split("* @param", 1)[0] // drop any kind of parameter annotation
 
-        return <div className={`monacoBlock ${disabled ? "monacoDisabledBlock" : ""} ${selected ? "expand" : ""} ${hover ? "hover" : ""}`}
+        let buttonRef: HTMLDivElement;
+        const handleRef = (ref: HTMLDivElement) => {
+            if (ref) buttonRef = ref;
+        }
+
+        return <div
+            className={classList("monacoBlock", disabled && "monacoDisabledBlock", selected && "expand", hover && "hover")}
             style={this.getSelectedStyle()}
             title={block.attributes.jsDoc}
-            key={`block_${qName}_${index}`} tabIndex={0} role="listitem"
-            onClick={this.getBlockClickHandler(qName)}
+            key={`block_${qName}_${index}`}
+            tabIndex={!this.state.selectedBlock && index === 0 ? 0 : selected ? 0 : -1}
+            role="listitem"
+            ref={handleRef}
+            onFocus={() => this.handleFocus(qName)}
+            onClick={() => buttonRef && buttonRef.focus()}
+            onBlur={() => this.handleBlur()}
             onMouseOver={this.getBlockMouseOver(qName)}
             onMouseOut={this.getBlockMouseOut(qName)}
             onKeyDown={this.getKeyDownHandler(block, snippet, isPython)}
@@ -419,13 +431,14 @@ export class MonacoFlyout extends data.Component<MonacoFlyoutProps, MonacoFlyout
     }
 
     renderCore() {
-        const { name, ns, color, icon, groups } = this.state;
+        const { name, ns, color, icon, groups, selectedBlock } = this.state;
         const rgb = pxt.toolbox.getAccessibleBackground(pxt.toolbox.convertColor(color || (ns && pxt.toolbox.getNamespaceColor(ns)) || "255"));
         const iconClass = `blocklyTreeIcon${icon ? (ns || icon).toLowerCase() : "Default"}`.replace(/\s/g, "");
-        return <div id="monacoFlyoutWidget" className="monacoFlyout" style={this.getFlyoutStyle()}>
+        const isBrandIcon = icon && brandIcons.hasOwnProperty(icon);
+        return <div id="monacoFlyoutWidget" className="monacoFlyout" style={this.getFlyoutStyle()} ref="flyout">
             <div id="monacoFlyoutWrapper" onScroll={this.scrollHandler} onWheel={this.wheelHandler} role="list">
                 <div className="monacoFlyoutLabel monacoFlyoutHeading">
-                    <span className={`monacoFlyoutHeadingIcon blocklyTreeIcon ${iconClass}`} role="presentation" style={this.getIconStyle(rgb)}>
+                    <span className={classList("monacoFlyoutHeadingIcon blocklyTreeIcon", iconClass, `${isBrandIcon ? "brandIcon" : ""}`)} role="presentation" style={this.getIconStyle(rgb)}>
                         {(icon && icon.length === 1) ? icon : ""}
                     </span>
                     <div className="monacoFlyoutLabelText">{pxtc.U.rlf(`{id:category}${name}`)}</div>
@@ -435,7 +448,7 @@ export class MonacoFlyout extends data.Component<MonacoFlyoutProps, MonacoFlyout
                     // Add group label, for non-default groups
                     if (g.name != pxt.DEFAULT_GROUP_NAME && groups.length > 1) {
                         group.push(
-                            <div className="monacoFlyoutLabel blocklyFlyoutGroup" key={`label_${i}`} tabIndex={0} onKeyDown={this.getKeyDownHandler()} role="separator">
+                            <div className="monacoFlyoutLabel blocklyFlyoutGroup" key={`label_${i}`} tabIndex={selectedBlock || i > 0 ? -1 : 0} onKeyDown={this.getKeyDownHandler()} role="separator">
                                 {g.icon && <span className={`monacoFlyoutHeadingIcon blocklyTreeIcon ${iconClass}`} role="presentation">{g.icon}</span>}
                                 <div className="monacoFlyoutLabelText">{pxtc.U.rlf(`{id:group}${g.name}`)}</div>
                                 {g.hasHelp && HELP_IMAGE_URI && <span>

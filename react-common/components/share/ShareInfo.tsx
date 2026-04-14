@@ -14,17 +14,18 @@ import { MultiplayerConfirmation } from "./MultiplayerConfirmation";
 import { addGameToKioskAsync } from "./Kiosk";
 import { pushNotificationMessage } from "../Notification";
 import { classList } from "../util";
+import { Link } from "../controls/Link";
 
-const vscodeDevUrl = "https://insiders.vscode.dev/makecode/"
+const vscodeDevUrl = "https://vscode.dev/edu/makecode/"
 
 export interface ShareInfoProps {
     projectName: string;
-    description?: string;
+    projectDescription?: string;
     screenshotUri?: string;
     isLoggedIn?: boolean;
     hasProjectBeenPersistentShared?: boolean;
     simRecorder: SimRecorder;
-    publishAsync: (name: string, screenshotUri?: string, forceAnonymous?: boolean) => Promise<ShareData>;
+    publishAsync: (name: string, description?: string, screenshotUri?: string, forceAnonymous?: boolean) => Promise<ShareData>;
     isMultiplayerGame?: boolean; // Arcade: Does the game being shared have multiplayer enabled?
     kind?: "multiplayer" | "vscode" | "share"; // Arcade: Was the share dialog opened specifically for hosting a multiplayer game?
     anonymousShareByDefault?: boolean;
@@ -36,7 +37,7 @@ export interface ShareInfoProps {
 export const ShareInfo = (props: ShareInfoProps) => {
     const {
         projectName,
-        description,
+        projectDescription,
         screenshotUri,
         isLoggedIn,
         simRecorder,
@@ -45,13 +46,15 @@ export const ShareInfo = (props: ShareInfoProps) => {
         anonymousShareByDefault,
         setAnonymousSharePreference,
         isMultiplayerGame,
-        kind,
+        kind = "share",
         onClose,
     } = props;
     const [ name, setName ] = React.useState(projectName);
+    const [ description, setDescription ] = React.useState(projectDescription);
     const [ thumbnailUri, setThumbnailUri ] = React.useState(screenshotUri);
-    const [ shareState, setShareState ] = React.useState<"share" | "gifrecord" | "publish" | "publishing">("share");
+    const [ shareState, setShareState ] = React.useState<"share" | "gifrecord" | "publish" | "publish-vscode" | "publishing">("share");
     const [ shareData, setShareData ] = React.useState<ShareData>();
+    const [ lastShareWasAnonymous, setLastShareWasAnonymous ] = React.useState<boolean | undefined>(undefined);
     const [ embedState, setEmbedState ] = React.useState<"none" | "code" | "editor" | "simulator">("none");
     const [ showQRCode, setShowQRCode ] = React.useState(false);
     const [ copySuccessful, setCopySuccessful ] = React.useState(false);
@@ -62,7 +65,9 @@ export const ShareInfo = (props: ShareInfoProps) => {
 
     const { simScreenshot, simGif } = pxt.appTarget.appTheme;
     const showSimulator = (simScreenshot || simGif) && !!simRecorder;
-    const showDescription = shareState !== "publish";
+    const prePublish = shareState === "share" || shareState === "publishing";
+    const isPublished = shareState === "publish" || shareState === "publish-vscode";
+    const showDescription = !isPublished;
     let qrCodeButtonRef: HTMLButtonElement;
     let inputRef: HTMLInputElement;
     let kioskInputRef: HTMLInputElement;
@@ -90,7 +95,8 @@ export const ShareInfo = (props: ShareInfoProps) => {
 
     const handlePublishClick = async () => {
         setShareState("publishing");
-        let publishedShareData = await publishAsync(name, thumbnailUri, isAnonymous);
+        setLastShareWasAnonymous(isAnonymous);
+        let publishedShareData = await publishAsync(name, description, thumbnailUri, isAnonymous);
         setShareData(publishedShareData);
         if (!publishedShareData?.error) setShareState("publish");
         else setShareState("share")
@@ -98,10 +104,11 @@ export const ShareInfo = (props: ShareInfoProps) => {
 
     const handlePublishInVscodeClick = async () => {
         setShareState("publishing");
-        let publishedShareData = await publishAsync(name, thumbnailUri, isAnonymous);
+        setLastShareWasAnonymous(isAnonymous);
+        let publishedShareData = await publishAsync(name, description, thumbnailUri, isAnonymous);
         setShareData(publishedShareData);
         if (!publishedShareData?.error) {
-            setShareState("publish");
+            setShareState("publish-vscode");
 
             pxt.tickEvent(`share.openInVscode`);
             window.open(vscodeDevUrl + publishedShareData.url.split("/").pop(), "_blank");
@@ -232,8 +239,9 @@ export const ShareInfo = (props: ShareInfoProps) => {
     const handleMultiplayerShareConfirmClick = async () => {
         setShareState("publishing");
         setIsShowingMultiConfirmation(false);
+        setLastShareWasAnonymous(isAnonymous);
 
-        const publishedShareData = await publishAsync(name, thumbnailUri, isAnonymous);
+        const publishedShareData = await publishAsync(name, description, thumbnailUri, isAnonymous);
 
         // TODO multiplayer: This won't work on staging (parseScriptId domains check doesn't include staging urls)
         // but those wouldn't load anyways (as staging multiplayer is currently fetching games from prod links)
@@ -315,9 +323,27 @@ export const ShareInfo = (props: ShareInfoProps) => {
         if (setAnonymousSharePreference) setAnonymousSharePreference(!newValue);
     }
 
-    const prePublish = shareState === "share" || shareState === "publishing";
+    const inputTitle = prePublish ? lf("Project Name") :
+        (shareState === "publish-vscode" ? lf("Share Successful") : lf("Project Link"));
 
-    const inputTitle = prePublish ? lf("Project Title") : lf("Project Link")
+    const shareAttemptWasAnonymous = lastShareWasAnonymous === undefined ? isAnonymous : lastShareWasAnonymous;
+    const hasGithubProvider = !!pxt.appTarget?.cloud?.cloudProviders?.github;
+    const shareErrorMessage = (() => {
+        if (!shareData?.error) return undefined;
+        if (shareData.error.statusCode !== 413) {
+            return lf("Oops! There was an error. Please ensure you are connected to the Internet and try again.");
+        }
+
+        if (shareAttemptWasAnonymous && hasGithubProvider) {
+            return lf("Oops! Your project is too big to share anonymously. Sign in and create a persistent link for higher limits, or publish to GitHub instead.");
+        } else if (shareAttemptWasAnonymous) {
+            return lf("Oops! Your project is too big to share anonymously. Sign in and create a persistent link to unlock a higher size limit.");
+        } else if (hasGithubProvider) {
+            return lf("Oops! Your project is too big. You can create a GitHub repository to share it.");
+        } else {
+            return lf("Oops! Your project is too big to share.");
+        }
+    })();
 
     return <>
         <div className="project-share-info">
@@ -329,7 +355,7 @@ export const ShareInfo = (props: ShareInfoProps) => {
                              <div className="common-spinner" />
                         </div>
                     }
-                    {shareState !== "publish" &&
+                    {!isPublished &&
                         <Button
                             className="link-button"
                             title={lf("Update project thumbnail")}
@@ -339,7 +365,7 @@ export const ShareInfo = (props: ShareInfoProps) => {
                 </div>
             }
             <div className="project-share-content">
-                {(prePublish || shareState === "publish") && <>
+                {(prePublish || isPublished) && <>
                     <div className="project-share-title project-share-label" id="share-input-title">
                         {inputTitle}
                     </div>
@@ -349,7 +375,25 @@ export const ShareInfo = (props: ShareInfoProps) => {
                             className="name-input"
                             initialValue={name}
                             placeholder={lf("Name your project")}
-                            onChange={setName} />
+                            onChange={setName}
+                            onBlur={setName}
+                            onEnterKey={setName}
+                            preserveValueOnBlur={true} />
+                        {pxt.appTarget.appTheme.showProjectDescription && <>
+                            <div className="project-share-title project-share-label" id="share-description-title">
+                                {lf("Project Description")}
+                            </div>
+                            <Textarea
+                                ariaDescribedBy="share-description-title"
+                                ariaLabel={lf("Type a description for your project")}
+                                initialValue={description !== undefined ? description : (projectDescription || '')}
+                                onChange={setDescription}
+                                id="projectDescriptionTextareaShare"
+                                maxLength={pxt.MAX_DESCRIPTION_LENGTH}
+                                showRemainingCharacterCount={500}
+                                resize="vertical"
+                            />
+                        </>}
                         {isLoggedIn && hasProjectBeenPersistentShared && <Checkbox
                             id="persistent-share-checkbox"
                             label={lf("Update existing share link for this project")}
@@ -359,11 +403,8 @@ export const ShareInfo = (props: ShareInfoProps) => {
                         </>
                     }
                     {prePublish && <>
-                        {shareData?.error && <div className="project-share-error">
-                            {(shareData.error.statusCode === 413
-                                && pxt.appTarget?.cloud?.cloudProviders?.github)
-                                ? lf("Oops! Your project is too big. You can create a GitHub repository to share it.")
-                                : lf("Oops! There was an error. Please ensure you are connected to the Internet and try again.")}
+                        {shareData?.error && shareErrorMessage && <div className="project-share-error">
+                            {shareErrorMessage}
                         </div>}
                         <div className="project-share-publish-actions">
                             {shareState === "share" &&
@@ -401,7 +442,20 @@ export const ShareInfo = (props: ShareInfoProps) => {
                             }
                         </div>
                     </>}
-
+                    {shareState === "publish-vscode" &&
+                        <div className="project-share-vscode">
+                            <div>
+                                {lf("🎉 All set! Your project is launching in VS Code. If it doesn't open soon, just click the button below!")}
+                            </div>
+                            <Link
+                                className="common-button secondary"
+                                href={vscodeDevUrl + shareData.url.split("/").pop()}
+                                target="_blank"
+                            >
+                                {lf("Open vscode.dev")}
+                            </Link>
+                    </div>
+                    }
                     {shareState === "publish" &&
                         <div className="project-share-data">
                             <div className="common-input-attached-button">
@@ -421,7 +475,7 @@ export const ShareInfo = (props: ShareInfoProps) => {
                             </div>
                             <div className="project-share-actions">
                                 <div className="project-share-social">
-                                    <Button className="square-button gray embed mobile-portrait-hidden"
+                                    <Button className="square-button neutral embed mobile-portrait-hidden"
                                         title={lf("Show embed code")}
                                         leftIcon="fas fa-code"
                                         onClick={handleEmbedClick} />
@@ -447,13 +501,13 @@ export const ShareInfo = (props: ShareInfoProps) => {
                                         heading={lf("Share on WhatsApp")} />
                                     {
                                         pxt.appTarget?.appTheme?.shareToKiosk &&
-                                            <Button className="square-button gray mobile-portrait-hidden"
+                                            <Button className="square-button neutral mobile-portrait-hidden social-button"
                                             title={lf("Share to MakeCode Arcade Kiosk")}
                                             leftIcon={"xicon kiosk"}
                                             onClick={handleKioskClick} />
                                     }
                                     {
-                                        navigator.share && <Button className="square-button device-share"
+                                        navigator.share && <Button className="square-button device-share social-button"
                                             title={lf("Show device share options")}
                                             ariaLabel={lf("Show device share options")}
                                             leftIcon={"icon share"}

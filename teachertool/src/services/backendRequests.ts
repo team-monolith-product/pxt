@@ -1,4 +1,3 @@
-import { Strings } from "../constants";
 import { stateAndDispatch } from "../state";
 import { ErrorCode } from "../types/errorCode";
 import { logError } from "./loggingService";
@@ -92,6 +91,9 @@ export async function loadTestableCollectionFromDocsAsync<T>(fileNames: string[]
 
 export async function askCopilotQuestionAsync(shareId: string, question: string): Promise<string | undefined> {
     const url = `/api/copilot/question`;
+
+    question = pxt.Util.cleanData(question);
+
     const data = { id: shareId, question };
     let result: string = "";
     try {

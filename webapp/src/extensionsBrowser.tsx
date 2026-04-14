@@ -78,7 +78,11 @@ export const ExtensionsBrowser = (props: ExtensionsProps) => {
         setSelectedTag("")
         setSearchComplete(false)
         setExtensionsToShow([emptyCard, emptyCard, emptyCard, emptyCard])
-        const exts = await fetchGithubDataAsync([searchFor])
+
+        const config = await pxt.packagesConfigAsync();
+
+        let exts = await fetchGithubDataAsync([searchFor])
+        exts = exts?.filter(e => !pxt.github.isRepoHidden(e, config));
         const parsedExt = exts?.map(repo => parseGithubRepo(repo)) ?? [];
         //Search bundled extensions as well
         fetchBundled().forEach(e => {
@@ -175,13 +179,15 @@ export const ExtensionsBrowser = (props: ExtensionsProps) => {
             core.showLoading("downloadingpackage", lf("downloading extension..."));
             const pkg = getExtensionFromFetched(scr.repo.fullName);
             if (pkg) {
-                r = await pxt.github.downloadLatestPackageAsync(pkg.repo);
+                const useProxy = pxt.github.shouldUseProxyForRepo(pkg.repo.fullName);
+                r = await pxt.github.downloadLatestPackageAsync(pkg.repo, useProxy);
             } else {
                 const res = await fetchGithubDataAsync([scr.repo.fullName]);
                 if (res && res.length > 0) {
                     const parsed = parseGithubRepo(res[0])
                     addExtensionsToPool([parsed])
-                    r = await pxt.github.downloadLatestPackageAsync(parsed.repo)
+                    const useProxy = pxt.github.shouldUseProxyForRepo(parsed.repo.fullName);
+                    r = await pxt.github.downloadLatestPackageAsync(parsed.repo, useProxy)
                 }
             }
         }
@@ -225,7 +231,12 @@ export const ExtensionsBrowser = (props: ExtensionsProps) => {
         // When searching multiple repos at the same time, use 'extension-search' which caches results
         // for much longer than 'gh-search'
         const virtualApi = preferredRepos.length <= 1 ? 'gh-search' : 'extension-search';
-        return data.getAsync<pxt.github.GitRepo[]>(`${virtualApi}:${preferredRepos.join("|")}`);
+
+        // Users can put anything in the search box.
+        // Make sure there are no secrets in it before we send to backend.
+        const cleanedRepos = preferredRepos.map(repo => pxt.Util.cleanData(repo));
+
+        return data.getAsync<pxt.github.GitRepo[]>(`${virtualApi}:${cleanedRepos.join("|")}`);
     }
 
     async function fetchGithubDataAndAddAsync(repos: string[]): Promise<ExtensionMeta[]> {
@@ -299,11 +310,12 @@ export const ExtensionsBrowser = (props: ExtensionsProps) => {
     function parseGithubRepo(r: pxt.github.GitRepo): ExtensionMeta {
         return {
             name: ghName(r),
+            displayName: r.displayName,
             type: ExtensionType.Github,
             imageUrl: pxt.github.repoIconUrl(r),
             repo: r,
             description: r.description,
-            fullName: r.fullName
+            fullRepo: r.fullName
         }
     }
 
@@ -360,6 +372,7 @@ export const ExtensionsBrowser = (props: ExtensionsProps) => {
     function packageConfigToExtensionMeta(p: pxt.PackageConfig): ExtensionMeta {
         return {
             name: p.name,
+            displayName: p.displayName,
             imageUrl: p.icon,
             type: ExtensionType.Bundled,
             learnMoreUrl: `/reference/${p.name}`,
@@ -458,22 +471,23 @@ export const ExtensionsBrowser = (props: ExtensionsProps) => {
         const { extensionInfo } = props;
         const {
             description,
-            fullName,
+            fullRepo,
             imageUrl,
             learnMoreUrl,
             loading,
             name,
+            displayName,
             repo,
             type,
         } = extensionInfo;
 
         return <ExtensionCard
-            title={name || fullName}
+            title={displayName || name || fullRepo}
             description={description}
             imageUrl={imageUrl}
             extension={extensionInfo}
             onClick={installExtension}
-            learnMoreUrl={learnMoreUrl || (fullName ? `/pkg/${fullName}` : undefined)}
+            learnMoreUrl={learnMoreUrl || (fullRepo ? `/pkg/${fullRepo}` : undefined)}
             loading={loading}
             label={pxt.isPkgBeta(extensionInfo) ? lf("Beta") : undefined}
             showDisclaimer={type != ExtensionType.Bundled && repo?.status != pxt.github.GitRepoStatus.Approved}
@@ -496,6 +510,7 @@ export const ExtensionsBrowser = (props: ExtensionsProps) => {
     }
 
     const categoryNames = getCategoryNames();
+    const showImportFile = pxt.BrowserUtils.hasFileAccess();
 
     return (
         <Modal
@@ -577,16 +592,18 @@ export const ExtensionsBrowser = (props: ExtensionsProps) => {
                                 }
                             </div>
                         }
-                        <div className="import-button">
-                            <Button
-                                ariaLabel={(lf("Open file from your computer"))}
-                                title={(lf("Import File"))}
-                                label={(lf("Import File"))}
-                                leftIcon="fas fa-upload"
-                                className="gray"
-                                onClick={importExtension}
-                            />
-                        </div>
+                        {showImportFile &&
+                            <div className="import-button">
+                                <Button
+                                    ariaLabel={(lf("Open file from your computer"))}
+                                    title={(lf("Import File"))}
+                                    label={(lf("Import File"))}
+                                    leftIcon="fas fa-upload"
+                                    className="neutral"
+                                    onClick={importExtension}
+                                />
+                            </div>
+                        }
                     </div>
                     {displayMode == ExtensionView.Search &&
                         <>

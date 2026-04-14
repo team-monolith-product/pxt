@@ -1,12 +1,12 @@
 import * as React from "react";
 import * as workspace from "./workspace";
 import { Tree, TreeItem, TreeItemBody } from "../../react-common/components/controls/Tree";
-import { createPortal } from "react-dom";
 import { Button } from "../../react-common/components/controls/Button";
 import { hideDialog, warningNotification } from "./core";
 import { FocusTrap } from "../../react-common/components/controls/FocusTrap";
 import { classList } from "../../react-common/components/util";
 import { HistoryFile, applySnapshot, patchConfigEditorVersion } from "../../pxteditor/history";
+import { ThemeManager } from "../../react-common/components/theming/themeManager";
 
 import ScriptText = pxt.workspace.ScriptText;
 
@@ -151,6 +151,18 @@ export const TimeMachine = (props: TimeMachineProps) => {
 
         importProject.current = loadProject;
 
+        // Sync iframe theme with main theme.
+        const themeManager = ThemeManager.getInstance(document);
+        const currentTheme = themeManager.getCurrentColorTheme();
+        if (currentTheme) {
+            sendMessageAsync({
+                type: "pxteditor",
+                action: "setcolorthemebyid",
+                colorThemeId: currentTheme.id,
+                savePreference: false
+            } as pxt.editor.EditorMessageSetColorThemeRequest);
+        }
+
         window.addEventListener("message", onMessageReceived);
         return () => {
             window.removeEventListener("message", onMessageReceived);
@@ -221,10 +233,15 @@ export const TimeMachine = (props: TimeMachineProps) => {
     let queryParams = [
         "timeMachine",
         "controller",
-        "skillsMap",
+        "skillmap",
         "noproject",
-        "nocookiebanner"
+        "nocookiebanner",
     ];
+
+    const localToken = pxt.storage.getLocal("local_token");
+    if (localToken) {
+        queryParams.push(`local_token=${localToken}`);
+    }
 
     if (pxt.appTarget?.appTheme.timeMachineQueryParams) {
         queryParams = queryParams.concat(pxt.appTarget.appTheme.timeMachineQueryParams);
@@ -234,7 +251,7 @@ export const TimeMachine = (props: TimeMachineProps) => {
 
     const url = `${window.location.origin + window.location.pathname}?${argString}`;
 
-    return createPortal(
+    return (
         <FocusTrap className="time-machine" onEscape={hideDialog}>
             <div className="time-machine-header">
                 <div className="time-machine-back-button">
@@ -328,7 +345,7 @@ export const TimeMachine = (props: TimeMachineProps) => {
                 </div>
             </div>
         </FocusTrap>
-    , document.body);
+    );
 }
 
 async function getTextAtTimestampAsync(text: ScriptText, history: HistoryFile, time: TimeEntry): Promise<Project> {
@@ -362,21 +379,31 @@ function formatTime(time: number) {
 }
 
 function formatDate(time: number) {
+    const oneDay = 1000 * 60 * 60 * 24;
+
     const now = new Date();
     const nowYear = now.getFullYear();
     const nowMonth = now.getMonth();
     const nowDay = now.getDate();
 
-    const date = new Date(time);
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const day = date.getDate();
+    const today = new Date(nowYear, nowMonth, nowDay);
+    const yesterday = new Date(today.getTime() - oneDay);
+    const oneWeekAgo = new Date(today.getTime() - oneDay * 7);
 
-    const diff = Date.now() - time;
-    const oneDay = 1000 * 60 * 60 * 24;
+    const editTime = new Date(time);
+    const editDay = new Date(editTime.getFullYear(), editTime.getMonth(), editTime.getDate());
 
-    if (year !== nowYear) {
-        return date.toLocaleDateString(
+    if (time >= today.getTime()) {
+        return lf("Today");
+    }
+    else if (time >= yesterday.getTime()) {
+        return lf("Yesterday")
+    }
+    else if (time >= oneWeekAgo.getTime()) {
+        return lf("{0} days ago", Math.floor((today.getTime() - editDay.getTime()) / oneDay));
+    }
+    else if (editDay.getFullYear() !== today.getFullYear()) {
+        return editTime.toLocaleDateString(
             pxt.U.userLanguage(),
             {
                 year: "numeric",
@@ -385,17 +412,8 @@ function formatDate(time: number) {
             }
         );
     }
-    else if (nowMonth === month && nowDay === day) {
-        return lf("Today");
-    }
-    else if (diff < oneDay * 2) {
-        return lf("Yesterday")
-    }
-    else if (diff < oneDay * 8) {
-        return lf("{0} days ago", Math.floor(diff / oneDay))
-    }
     else {
-        return date.toLocaleDateString(
+        return editTime.toLocaleDateString(
             pxt.U.userLanguage(),
             {
                 month: "short",
@@ -439,7 +457,7 @@ function getTimelineEntries(history: HistoryFile): TimelineEntry[] {
 
     const createTimeEntry = (timestamp: number, kind: "snapshot" | "diff" | "share") => {
         const date = new Date(timestamp);
-        const key = new Date(date.getFullYear(), date.getMonth(), date.getDay()).getTime();
+        const key = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 
         if (!buckets[key]) {
             buckets[key] = [];

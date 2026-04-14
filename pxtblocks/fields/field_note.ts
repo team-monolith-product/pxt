@@ -1,7 +1,7 @@
 /// <reference path="../../built/pxtlib.d.ts" />
 
 import * as Blockly from "blockly";
-import { FieldCustomOptions, FieldCustom, parseColour } from "./field_utils";
+import { FieldCustomOptions, FieldCustom, parseColour, clearDropDownDiv } from "./field_utils";
 
 enum Note {
     C = 262,
@@ -209,17 +209,25 @@ export class FieldNote extends Blockly.FieldNumber implements FieldCustom {
         if (this.isExpanded) {
             return "" + this.value_;
         } else {
-            const note = +this.value_;
-            for (let i = 0; i < this.nKeys_; i++) {
-                if (Math.abs(this.getKeyFreq(i + this.minNote_) - note) < this.eps) {
-                    return this.getKeyName(i + this.minNote_);
-                }
-            }
-            let text = note.toString();
-            if (!isNaN(note))
-                text += " Hz";
-            return text;
+            return this.getNoteString();
         }
+    }
+
+    getFieldDescription(): string {
+        return this.getNoteString() || lf("note");
+    }
+
+    private getNoteString() {
+        const note = +this.value_;
+        for (let i = 0; i < this.nKeys_; i++) {
+            if (Math.abs(this.getKeyFreq(i + this.minNote_) - note) < this.eps) {
+                return this.getKeyName(i + this.minNote_);
+            }
+        }
+        let text = note.toString();
+        if (!isNaN(note))
+            text += " Hz";
+        return text;
     }
 
     /**
@@ -241,6 +249,11 @@ export class FieldNote extends Blockly.FieldNumber implements FieldCustom {
         this.refreshText()
     };
 
+    protected widgetDispose_(): void {
+        this.htmlInput_.removeEventListener("keydown", this.keyHandler);
+        super.widgetDispose_();
+    }
+
     /**
      * Create a piano under the note field.
      */
@@ -250,7 +263,7 @@ export class FieldNote extends Blockly.FieldNumber implements FieldCustom {
 
         // If there is an existing drop-down someone else owns, hide it immediately and clear it.
         Blockly.DropDownDiv.hideWithoutAnimation();
-        Blockly.DropDownDiv.clearContent();
+        clearDropDownDiv();
 
         const isMobile = pxt.BrowserUtils.isMobile() || pxt.BrowserUtils.isIOS();
         // invoke FieldTextInputs showeditor, so we can set quiet explicitly / not have a pop up dialogue
@@ -292,6 +305,7 @@ export class FieldNote extends Blockly.FieldNumber implements FieldCustom {
         );
         pianoDiv.appendChild(this.noteLabel);
         this.noteLabel.textContent = "-";
+        this.noteLabel.ariaLive = "polite";
 
         let startingPage = 0;
         for (let i = 0; i < this.nKeys_; i++) {
@@ -321,7 +335,25 @@ export class FieldNote extends Blockly.FieldNumber implements FieldCustom {
         }
 
         Blockly.DropDownDiv.setColour(this.primaryColour, this.borderColour);
-        Blockly.DropDownDiv.showPositionedByBlock(this, this.sourceBlock_ as Blockly.BlockSvg, () => this.onHide());
+        Blockly.DropDownDiv.showPositionedByBlock(this, this.sourceBlock_ as Blockly.BlockSvg, () => this.onHide(), undefined, false);
+
+        this.htmlInput_.ariaLabel = lf("Press the up and down arrow keys to select the next or previous note, or enter a value in hertz");
+        this.htmlInput_.addEventListener("keydown", this.keyHandler);
+    }
+
+    protected keyHandler = (ev: KeyboardEvent) => {
+        const currentFreq = typeof this.value_ === "string" ? parseFloat(this.value_) : this.value_;
+
+        if (ev.code === "ArrowUp" || ev.code === "ArrowDown") {
+            const {keyAbove, keyBelow} = this.getNeighboringKeys(currentFreq);
+            const newKey = ev.code === "ArrowUp" ? keyAbove : keyBelow;
+            const newFrequency = this.getKeyFreq(newKey);
+            this.setValue(newFrequency);
+            this.playKey(this.piano[newKey - this.minNote_], newFrequency);
+            this.noteLabel.textContent = this.getKeyName(newKey);
+            ev.stopPropagation();
+            ev.preventDefault();
+        }
     }
 
     protected playKey(key: HTMLDivElement, frequency: number) {
@@ -517,6 +549,42 @@ export class FieldNote extends Blockly.FieldNumber implements FieldCustom {
         return FieldNote.keyHeight / 2;
     }
 
+    protected getNeighboringKeys(freq: number) {
+        let lowerBound;
+        let upperBound;
+
+        for (let candidate = this.minNote_; candidate <= this.maxNote_; ++candidate) {
+            if (this.getKeyFreq(candidate) + this.eps > freq) {
+                upperBound = candidate;
+                break;
+            }
+            lowerBound = candidate;
+        }
+
+        // Clamp key range at the top and bottom
+        if (!lowerBound) {
+            return {
+                keyAbove: freq + this.eps > this.getKeyFreq(this.minNote_) ? this.minNote_ + 1 : this.minNote_,
+                keyBelow: this.minNote_
+            };
+        }
+        if (!upperBound || upperBound === this.maxNote_) {
+            return {
+                keyAbove: this.maxNote_,
+                keyBelow: freq - this.eps < this.getKeyFreq(this.maxNote_) ? this.maxNote_ - 1 : this.maxNote_
+            };
+        }
+
+        // If we are within an epsilon of confidence, only consider one boundary point
+        if (freq < this.getKeyFreq(lowerBound) + this.eps) {
+            upperBound = lowerBound;
+        } else if (freq > this.getKeyFreq(upperBound) - this.eps) {
+            lowerBound = upperBound;
+        }
+
+        return {keyAbove: lowerBound + 1, keyBelow: upperBound - 1};
+    }
+
     protected getKeyFreq(keyIndex: number) {
         return this.getKeyNoteData(keyIndex).freq;
     }
@@ -574,55 +642,55 @@ export class FieldNote extends Blockly.FieldNumber implements FieldCustom {
         if (!FieldNote.Notes) {
             FieldNote.Notes = {
                 28: { name: lf("{id:note}C"), prefixedName: lf("Low C"), freq: 131 },
-                29: { name: lf("C#"), prefixedName: lf("Low C#"), freq: 139 },
+                29: { name: lf("C♯"), prefixedName: lf("Low C♯"), freq: 139 },
                 30: { name: lf("{id:note}D"), prefixedName: lf("Low D"), freq: 147 },
-                31: { name: lf("D#"), prefixedName: lf("Low D#"), freq: 156 },
+                31: { name: lf("D♯"), prefixedName: lf("Low D♯"), freq: 156 },
                 32: { name: lf("{id:note}E"), prefixedName: lf("Low E"), freq: 165 },
                 33: { name: lf("{id:note}F"), prefixedName: lf("Low F"), freq: 175 },
-                34: { name: lf("F#"), prefixedName: lf("Low F#"), freq: 185 },
+                34: { name: lf("F♯"), prefixedName: lf("Low F♯"), freq: 185 },
                 35: { name: lf("{id:note}G"), prefixedName: lf("Low G"), freq: 196 },
-                36: { name: lf("G#"), prefixedName: lf("Low G#"), freq: 208 },
+                36: { name: lf("G♯"), prefixedName: lf("Low G♯"), freq: 208 },
                 37: { name: lf("{id:note}A"), prefixedName: lf("Low A"), freq: 220 },
-                38: { name: lf("A#"), prefixedName: lf("Low A#"), freq: 233 },
+                38: { name: lf("A♯"), prefixedName: lf("Low A♯"), freq: 233 },
                 39: { name: lf("{id:note}B"), prefixedName: lf("Low B"), freq: 247 },
 
                 40: { name: lf("{id:note}C"), prefixedName: lf("Middle C"), freq: 262 },
-                41: { name: lf("C#"), prefixedName: lf("Middle C#"), freq: 277 },
+                41: { name: lf("C♯"), prefixedName: lf("Middle C♯"), freq: 277 },
                 42: { name: lf("{id:note}D"), prefixedName: lf("Middle D"), freq: 294 },
-                43: { name: lf("D#"), prefixedName: lf("Middle D#"), freq: 311 },
+                43: { name: lf("D♯"), prefixedName: lf("Middle D♯"), freq: 311 },
                 44: { name: lf("{id:note}E"), prefixedName: lf("Middle E"), freq: 330 },
                 45: { name: lf("{id:note}F"), prefixedName: lf("Middle F"), freq: 349 },
-                46: { name: lf("F#"), prefixedName: lf("Middle F#"), freq: 370 },
+                46: { name: lf("F♯"), prefixedName: lf("Middle F♯"), freq: 370 },
                 47: { name: lf("{id:note}G"), prefixedName: lf("Middle G"), freq: 392 },
-                48: { name: lf("G#"), prefixedName: lf("Middle G#"), freq: 415 },
+                48: { name: lf("G♯"), prefixedName: lf("Middle G♯"), freq: 415 },
                 49: { name: lf("{id:note}A"), prefixedName: lf("Middle A"), freq: 440 },
-                50: { name: lf("A#"), prefixedName: lf("Middle A#"), freq: 466 },
+                50: { name: lf("A♯"), prefixedName: lf("Middle A♯"), freq: 466 },
                 51: { name: lf("{id:note}B"), prefixedName: lf("Middle B"), freq: 494 },
 
                 52: { name: lf("{id:note}C"), prefixedName: lf("Tenor C"), altPrefixedName: lf("High C"), freq: 523 },
-                53: { name: lf("C#"), prefixedName: lf("Tenor C#"), altPrefixedName: lf("High C#"), freq: 554 },
+                53: { name: lf("C♯"), prefixedName: lf("Tenor C♯"), altPrefixedName: lf("High C♯"), freq: 554 },
                 54: { name: lf("{id:note}D"), prefixedName: lf("Tenor D"), altPrefixedName: lf("High D"), freq: 587 },
-                55: { name: lf("D#"), prefixedName: lf("Tenor D#"), altPrefixedName: lf("High D#"), freq: 622 },
+                55: { name: lf("D♯"), prefixedName: lf("Tenor D♯"), altPrefixedName: lf("High D♯"), freq: 622 },
                 56: { name: lf("{id:note}E"), prefixedName: lf("Tenor E"), altPrefixedName: lf("High E"), freq: 659 },
                 57: { name: lf("{id:note}F"), prefixedName: lf("Tenor F"), altPrefixedName: lf("High F"), freq: 698 },
-                58: { name: lf("F#"), prefixedName: lf("Tenor F#"), altPrefixedName: lf("High F#"), freq: 740 },
+                58: { name: lf("F♯"), prefixedName: lf("Tenor F♯"), altPrefixedName: lf("High F♯"), freq: 740 },
                 59: { name: lf("{id:note}G"), prefixedName: lf("Tenor G"), altPrefixedName: lf("High G"), freq: 784 },
-                60: { name: lf("G#"), prefixedName: lf("Tenor G#"), altPrefixedName: lf("High G#"), freq: 831 },
+                60: { name: lf("G♯"), prefixedName: lf("Tenor G♯"), altPrefixedName: lf("High G♯"), freq: 831 },
                 61: { name: lf("{id:note}A"), prefixedName: lf("Tenor A"), altPrefixedName: lf("High A"), freq: 880 },
-                62: { name: lf("A#"), prefixedName: lf("Tenor A#"), altPrefixedName: lf("High A#"), freq: 932 },
+                62: { name: lf("A♯"), prefixedName: lf("Tenor A♯"), altPrefixedName: lf("High A♯"), freq: 932 },
                 63: { name: lf("{id:note}B"), prefixedName: lf("Tenor B"), altPrefixedName: lf("High B"), freq: 988 },
 
                 64: { name: lf("{id:note}C"), prefixedName: lf("High C"), freq: 1046 },
-                65: { name: lf("C#"), prefixedName: lf("High C#"), freq: 1109 },
+                65: { name: lf("C♯"), prefixedName: lf("High C♯"), freq: 1109 },
                 66: { name: lf("{id:note}D"), prefixedName: lf("High D"), freq: 1175 },
-                67: { name: lf("D#"), prefixedName: lf("High D#"), freq: 1245 },
+                67: { name: lf("D♯"), prefixedName: lf("High D♯"), freq: 1245 },
                 68: { name: lf("{id:note}E"), prefixedName: lf("High E"), freq: 1319 },
                 69: { name: lf("{id:note}F"), prefixedName: lf("High F"), freq: 1397 },
-                70: { name: lf("F#"), prefixedName: lf("High F#"), freq: 1478 },
+                70: { name: lf("F♯"), prefixedName: lf("High F♯"), freq: 1478 },
                 71: { name: lf("{id:note}G"), prefixedName: lf("High G"), freq: 1568 },
-                72: { name: lf("G#"), prefixedName: lf("High G#"), freq: 1661 },
+                72: { name: lf("G♯"), prefixedName: lf("High G♯"), freq: 1661 },
                 73: { name: lf("{id:note}A"), prefixedName: lf("High A"), freq: 1760 },
-                74: { name: lf("A#"), prefixedName: lf("High A#"), freq: 1865 },
+                74: { name: lf("A♯"), prefixedName: lf("High A♯"), freq: 1865 },
                 75: { name: lf("{id:note}B"), prefixedName: lf("High B"), freq: 1976 }
             }
         }

@@ -5,7 +5,7 @@ import { ReadyResources } from '../lib/readyResources';
 import { getCompletedTags, lookupActivityProgress, isMapCompleted,
     isRewardNode, applyUserUpgrades, applyUserMigrations } from '../lib/skillMapUtils';
 
-export type ModalType = "restart-warning" | "completion" | "report-abuse" | "reset" | "carryover" | "share" | "login" | "login-prompt" | "delete-account" | "reward";
+export type ModalType = "restart-warning" | "completion" | "report-abuse" | "reset" | "carryover" | "share" | "login" | "login-prompt" | "delete-account" | "reward" | "markdown-intro";
 export type PageSourceStatus = "approved" | "banned" | "unknown";
 
 // State for the entire page
@@ -14,6 +14,7 @@ export interface SkillMapState {
     description: string;
     infoUrl?: string;
     backgroundImageUrl?: string;
+    pixelatedBackground?: boolean;
     bannerImageUrl?: string;
     user: UserState;
     pageSourceUrl: string;
@@ -30,6 +31,9 @@ export interface SkillMapState {
     auth: AuthState;
     readyResources?: ReadyResources;
     showSelectLanguage?: boolean;
+    showSelectTheme?: boolean;
+    colorThemeId?: string;
+    showFeedback?: boolean;
 }
 
 export interface EditorViewState {
@@ -46,6 +50,7 @@ export interface ModalState {
     currentMapId?: string;
     currentActivityId?: string;
     currentReward?: MapReward;
+    markdownContent?: string;
 }
 
 export interface ShareState {
@@ -78,18 +83,18 @@ const initialState: SkillMapState = {
         completedTags: {}
     },
     theme: {
-        backgroundColor: "var(--body-background-color)",
-        pathColor: "#BFBFBF",
-        strokeColor: "#000000",
-        rewardNodeColor: "var(--primary-color)",
-        rewardNodeForeground: "#000000",
-        unlockedNodeColor: "var(--secondary-color)",
-        unlockedNodeForeground: "#000000",
-        lockedNodeColor: "#BFBFBF",
-        lockedNodeForeground: "#000000",
-        completedNodeColor: "var(--secondary-color)",
-        completedNodeForeground: "#000000",
-        selectedStrokeColor: "var(--hover-color)",
+        backgroundColor: "var(--pxt-target-background1)",
+        pathColor: "var(--pxt-neutral-background1)",
+        strokeColor: "var(--pxt-target-foreground1)",
+        rewardNodeColor: "var(--pxt-primary-background)",
+        rewardNodeForeground: "var(--pxt-primary-foreground)",
+        unlockedNodeColor: "var(--pxt-secondary-background)",
+        unlockedNodeForeground: "var(--pxt-secondary-foreground)",
+        lockedNodeColor: "var(--pxt-neutral-background1)",
+        lockedNodeForeground: "var(--pxt-neutral-foreground1)",
+        completedNodeColor: "var(--pxt-secondary-background)",
+        completedNodeForeground: "var(--pxt-secondary-foreground)",
+        selectedStrokeColor: "var(--pxt-secondary-background)",
         pathOpacity: 0.5,
     },
     maps: {},
@@ -121,6 +126,7 @@ const topReducer = (state: SkillMapState = initialState, action: any): SkillMapS
                 description: initialState.description,
                 infoUrl: initialState.infoUrl,
                 backgroundImageUrl: undefined,
+                pixelatedBackground: undefined,
                 bannerImageUrl: undefined,
                 alternateSourceUrls: undefined,
                 theme: {
@@ -323,7 +329,8 @@ const topReducer = (state: SkillMapState = initialState, action: any): SkillMapS
         case actions.SET_PAGE_BACKGROUND_IMAGE_URL:
             return {
                 ...state,
-                backgroundImageUrl: action.backgroundImageUrl
+                backgroundImageUrl: action.backgroundImageUrl,
+                pixelatedBackground: action.pixelatedBackground
             }
         case actions.SET_PAGE_BANNER_IMAGE_URL:
             return {
@@ -407,6 +414,16 @@ const topReducer = (state: SkillMapState = initialState, action: any): SkillMapS
                 showSelectLanguage: false
             }
         }
+        case actions.SHOW_SELECT_THEME:
+            return {
+                ...state,
+                showSelectTheme: true
+            };
+        case actions.HIDE_SELECT_THEME:
+            return {
+                ...state,
+                showSelectTheme: false
+            };
         case actions.SET_USER_PREFERENCES:
             return {
                 ...state,
@@ -431,6 +448,16 @@ const topReducer = (state: SkillMapState = initialState, action: any): SkillMapS
         case actions.GRANT_SKILLMAP_BADGE:
             return {
                 ...state
+            }
+        case actions.SHOW_FEEDBACK:
+            return {
+                ...state,
+                showFeedback: true
+            }
+        case actions.HIDE_FEEDBACK:
+            return {
+                ...state,
+                showFeedback: false
             }
         default:
             return state

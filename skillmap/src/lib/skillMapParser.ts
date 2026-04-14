@@ -95,8 +95,8 @@ function buildMapFromSections(header: MarkdownSection, sections: MarkdownSection
 function inflateSkillMap(section: MarkdownSection): Partial<SkillMap> {
     const result: Partial<SkillMap> = {
         mapId: section.header.toLowerCase(),
-        displayName: section.attributes["name"] || section.header,
-        description: section.attributes["description"],
+        displayName: section.attributes["name"] || getCodeBlock(section, "name") || section.header,
+        description: section.attributes["description"] || getCodeBlock(section, "description"),
         completionUrl: section.attributes["completionurl"],
         prerequisites: [],
         activities: {},
@@ -135,7 +135,7 @@ function inflateMapNode(section: MarkdownSection): MapNode {
         activityId: section.header.toLowerCase(),
         imageUrl: section.attributes["imageurl"],
         next: [],
-        displayName: section.attributes["name"] || section.header,
+        displayName: section.attributes["name"] || getCodeBlock(section, "name") || section.header,
         nextIds: parseList(section.attributes["next"])
     }
 
@@ -309,7 +309,7 @@ function inflateActivity(section: MarkdownSection, base: Partial<MapActivity>): 
     const result: Partial<MapActivity> = {
         ...base,
         kind: "activity",
-        description: section.attributes["description"],
+        description: section.attributes["description"] || getCodeBlock(section, "description"),
         url: section.attributes["url"],
         tags: parseList(section.attributes["tags"]),
         // defaults to true
@@ -384,29 +384,39 @@ function inflateMetadata(section: MarkdownSection): PageMetadata {
     const lockedNodeColor = section.attributes["lockednodecolor"];
     const completedNodeColor = section.attributes["completednodecolor"];
 
+    const introductoryModal = getCodeBlock(section, "intro");
+
     return {
-        title: section.attributes["name"] || section.header,
-        description: section.attributes["description"],
+        title: section.attributes["name"] || getCodeBlock(section, "name") || section.header,
+        description: section.attributes["description"] || getCodeBlock(section, "description"),
         infoUrl: cleanInfoUrl(section.attributes["infourl"]),
         backgroundImageUrl: section.attributes["backgroundurl"],
+        pixelatedBackground: isTrue(section.attributes["pixelatedbackground"]),
         bannerImageUrl: section.attributes["bannerurl"],
         alternateSources: parseList(section.attributes["alternatesources"]),
         theme: {
-            backgroundColor: tertiary || "var(--body-background-color)",
+            /* Many of these remain hard-coded because their interaction with the fixed
+            background image is more important than the main site theme */
+            backgroundColor: tertiary || "var(--pxt-target-background1)",
             pathColor: primary || "#BFBFBF",
             strokeColor: "#000000",
-            rewardNodeColor: highlight || "var(--primary-color)",
+            rewardNodeColor: highlight || "var(--pxt-primary-background)",
             rewardNodeForeground: highlight ? getContrastingColor(highlight) : "#000000",
-            unlockedNodeColor: unlockedNodeColor || secondary || "var(--secondary-color)",
+            unlockedNodeColor: unlockedNodeColor || secondary || "var(--pxt-secondary-background)",
             unlockedNodeForeground: (unlockedNodeColor || secondary) ? getContrastingColor(unlockedNodeColor || secondary) : "#000000",
             lockedNodeColor: lockedNodeColor || primary || "#BFBFBF",
             lockedNodeForeground: (lockedNodeColor || primary) ? getContrastingColor(lockedNodeColor || primary) : "#000000",
-            completedNodeColor: completedNodeColor || secondary || "var(--secondary-color)",
+            completedNodeColor: completedNodeColor || secondary || "var(--pxt-secondary-background)",
             completedNodeForeground: (completedNodeColor || secondary) ? getContrastingColor(completedNodeColor || secondary) : "#000000",
-            selectedStrokeColor: highlight || "var(--primary-color)",
+            selectedStrokeColor: highlight || "var(--pxt-primary-background)",
             pathOpacity: 0.5,
-        }
+        },
+        introductoryModal
     }
+}
+
+function getCodeBlock(section: MarkdownSection, languageCode: string): string | undefined {
+    return section.codeBlocks?.find(b => b.languageCode === languageCode)?.content?.trim();
 }
 
 function getContrastingColor(color: string) {

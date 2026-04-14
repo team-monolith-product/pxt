@@ -5,6 +5,8 @@ import { countOptionals, getFunctionName, getInputTargetBlock, getLoopVariableFi
 import { getDefinition } from "../plugins/functions";
 import { CommonFunctionBlock } from "../plugins/functions/commonFunctionMixin";
 import { PXT_WARNING_ID } from "./compiler";
+import { DRAGGABLE_PARAM_INPUT_PREFIX } from "../loader";
+import { getContainingFunction } from "../plugins/duplicateOnDrag";
 
 interface DeclaredVariable {
     name: string;
@@ -77,9 +79,18 @@ export function infer(allBlocks: Blockly.Block[], e: Environment, w: Blockly.Wor
                     break;
                 case "pxt_controls_for_of":
                 case "controls_for_of":
-                    const listTp = returnType(e, getInputTargetBlock(e, b, "LIST"));
-                    const elementTp = lookup(e, b, getLoopVariableField(e, b).getField("VAR").getText()).type;
-                    genericLink(listTp, elementTp);
+                    const listArgument = getInputTargetBlock(e, b, "LIST");
+                    if (listArgument && listArgument.type !== "placeholder") {
+                        const listTp = returnType(e, listArgument);
+                        const elementTp = lookup(e, b, getLoopVariableField(e, b).getField("VAR").getText()).type;
+                        genericLink(listTp, elementTp);
+                    }
+                    else {
+                        e.diagnostics.push({
+                            blockId: b.id,
+                            message: lf("The 'for of' block must have a list input")
+                        });
+                    }
                     break;
                 case "variables_set":
                 case "variables_change":
@@ -425,6 +436,8 @@ function getReturnTypeOfFunction(e: Environment, name: string) {
             const returnTypes: Point[] = [];
             for (const child of definition.getDescendants(false)) {
                 if (child.type === "function_return") {
+
+                    if (getContainingFunction(child) !== definition) continue;
                     attachPlaceholderIf(e, child, "RETURN_VALUE");
                     returnTypes.push(returnType(e, getInputTargetBlock(e, child, "RETURN_VALUE")));
                 }
@@ -669,7 +682,7 @@ function getCBParameters(b: Blockly.Block, stdfun: StdFunc, e: Environment): Dec
         for (let i = 0; i < stdfun.comp.handlerArgs.length; i++) {
             const arg = stdfun.comp.handlerArgs[i];
             let varName: string;
-            const varBlock = getInputTargetBlock(e, b, "HANDLER_DRAG_PARAM_" + arg.name) as Blockly.Block;
+            const varBlock = getInputTargetBlock(e, b, DRAGGABLE_PARAM_INPUT_PREFIX + arg.name) as Blockly.Block;
 
             if (stdfun.attrs.draggableParameters === "reporter") {
                 varName = varBlock && varBlock.getFieldValue("VALUE");
@@ -677,7 +690,7 @@ function getCBParameters(b: Blockly.Block, stdfun: StdFunc, e: Environment): Dec
                 varName = varBlock && varBlock.getField("VAR").getText();
             }
 
-            if (varName !== null) {
+            if (varName !== null && varName !== undefined) {
                 handlerArgs.push({
                     name: varName,
                     type: mkPoint(arg.type)

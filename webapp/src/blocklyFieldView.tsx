@@ -7,6 +7,7 @@ import { ImageFieldEditor } from "./components/ImageFieldEditor";
 import { MusicEditor } from "./components/musicEditor/MusicEditor";
 import { MusicFieldEditor } from "./components/MusicFieldEditor";
 import { SoundEffectEditor } from "./components/soundEffectEditor/SoundEffectEditor";
+import { AssetFilePicker } from "./components/AssetFilePicker";
 
 export interface EditorBounds {
     top: number;
@@ -226,7 +227,7 @@ export function setContainerClass(className: string) {
 }
 
 export function init() {
-    pxt.react.getFieldEditorView = function<U>(fieldEditorId: string, value: U, options: any, container?: HTMLDivElement) {
+    pxt.react.getFieldEditorView = function<U>(fieldEditorId: string, value: U, options: any, container?: HTMLDivElement, keyboardTriggered?: boolean) {
         if (current) current.dispose();
 
         const refHandler = (e: FieldEditorComponent<any>) => {
@@ -260,11 +261,17 @@ export function init() {
                         }}
                         onSoundChange={options.onSoundChange}
                         initialSound={options.initialSound}
-                        useMixerSynthesizer={options.useMixerSynthesizer} />
+                        useMixerSynthesizer={options.useMixerSynthesizer}
+                        keyboardTriggered={keyboardTriggered} />
                 )
                 break;
             case "music-editor":
-                current.injectElement(<ImageFieldEditor ref={ refHandler } singleFrame={true} isMusicEditor={true} />)
+                current.injectElement(<ImageFieldEditor ref={ refHandler } singleFrame={true} isMusicEditor={true} />);
+                break;
+            case "file-picker":
+                current.injectElement(<AssetFilePicker ref={ refHandler } />);
+                break;
+
         }
 
         if (cachedBounds) current.resize(cachedBounds);
