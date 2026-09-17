@@ -860,6 +860,9 @@ export class Editor extends toolboxeditor.ToolboxEditor {
                 this.changeCallback();
                 this.markIncomplete = false;
             }
+            if (ev.type === Blockly.Events.BLOCK_CREATE || ev.type === Blockly.Events.BLOCK_DELETE) {
+                this.dropChangedToolboxHighlights();
+            }
             if (ev.type == Blockly.Events.CREATE) {
                 let blockId = ev.xml.getAttribute('type');
                 if (blockId == "variables_set") {
@@ -1437,6 +1440,52 @@ export class Editor extends toolboxeditor.ToolboxEditor {
         this.showFlyoutInternal_(pxtblockly.createFunctionsFlyoutCategory(this.editor), "functions", true);
     }
 
+    // Block types the host asked to highlight, with how many of them the workspace held at that moment.
+    // A highlight is dropped as soon as the student adds or removes that kind of block.
+    private highlightedBlockTypeToCount = new Map<string, number>();
+
+    highlightToolboxBlocks(blockTypes: string[]) {
+        if (!this.editor) return;
+
+        this.highlightedBlockTypeToCount.clear();
+        for (const blockType of blockTypes) {
+            this.highlightedBlockTypeToCount.set(blockType, this.countWorkspaceBlocks(blockType));
+        }
+
+        // Opening the category re-renders the flyout, which applies the highlight.
+        if (blockTypes.length > 0 && this.toolbox) {
+            this.toolbox.selectCategoryOfBlock(parseHighlightedBlockType(blockTypes[0]).type);
+        }
+        this.refreshFlyoutHighlights();
+    }
+
+    private countWorkspaceBlocks(blockType: string) {
+        return this.editor.getAllBlocks(false).filter(block => matchesHighlightedBlockType(block, blockType)).length;
+    }
+
+    private dropChangedToolboxHighlights() {
+        let changed = false;
+        this.highlightedBlockTypeToCount.forEach((count, blockType) => {
+            if (this.countWorkspaceBlocks(blockType) !== count) {
+                this.highlightedBlockTypeToCount.delete(blockType);
+                changed = true;
+            }
+        });
+        if (changed) this.refreshFlyoutHighlights();
+    }
+
+    // The flyout caches its blocks per category, so a cached block keeps its highlight until it is shown again.
+    // That is why this also turns highlights off, not only on.
+    private refreshFlyoutHighlights() {
+        const flyout = this.editor?.getFlyout();
+        if (!flyout?.isVisible()) return;
+
+        const blockTypes = Array.from(this.highlightedBlockTypeToCount.keys());
+        for (const block of flyout.getWorkspace().getTopBlocks(false)) {
+            block.setHighlighted(blockTypes.some(blockType => matchesHighlightedBlockType(block, blockType)));
+        }
+    }
+
     getViewState() {
         // ZOOM etc
         return {}
@@ -1552,6 +1601,7 @@ export class Editor extends toolboxeditor.ToolboxEditor {
                 // serial editor is more like an overlay than a custom editor, so preserve blocks undo stack
                 if (!this.parent.shouldPreserveUndoStack()) pxtblockly.clearWithoutEvents(this.editor);
                 this.closeFlyout();
+                this.highlightedBlockTypeToCount.clear();
 
                 this.filterToolbox();
                 if (this.parent.state.editorState && this.parent.state.editorState.hasCategories != undefined) {
@@ -2268,6 +2318,7 @@ export class Editor extends toolboxeditor.ToolboxEditor {
         const flyout = this.editor.getFlyout();
         flyout.show(xmlList);
         flyout.scrollToStart();
+        this.refreshFlyoutHighlights();
     }
 
     // For editors that have no toolbox
@@ -2663,6 +2714,21 @@ function disposeOfTemporaryAssets(workspace: Blockly.Workspace) {
 
 function clearTemporaryAssetBlockData(workspace: Blockly.Workspace) {
     forEachImageField(workspace, field => field.clearTemporaryAssetData());
+}
+
+/**
+ * A highlighted block type is a Blockly block type, optionally followed by a function name
+ * (`function_call:name:arg:type`), so that only one function's blocks match.
+ */
+function parseHighlightedBlockType(blockType: string) {
+    const [type, functionName] = blockType.split(":");
+    return { type, functionName };
+}
+
+function matchesHighlightedBlockType(block: Blockly.Block, blockType: string) {
+    const { type, functionName } = parseHighlightedBlockType(blockType);
+    if (block.type !== type) return false;
+    return functionName === undefined || (block as pxtblockly.FunctionCallBlock).getName?.() === functionName;
 }
 
 async function setHighlightWarningAsync(block: Blockly.BlockSvg, enabled: boolean) {
