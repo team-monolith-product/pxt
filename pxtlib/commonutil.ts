@@ -136,6 +136,8 @@ namespace ts.pxtc.Util {
 
     const koStringOverrides: pxt.Map<string> = {
         "Duplicate": "복제",
+        "Paste": "붙여넣기",
+        "Find…": "찾기…",
     };
 
     export function setLocalizedStrings(strs: pxt.Map<string>) {
