@@ -134,9 +134,14 @@ namespace ts.pxtc.Util {
         return _localizeStrings;
     }
 
+    const koStringOverrides: pxt.Map<string> = {
+        "Duplicate": "복제",
+    };
+
     export function setLocalizedStrings(strs: pxt.Map<string>) {
         //_didSetlocalizations = true;
-        _localizeStrings = strs;
+        const isKorean = userLanguage().split("-")[0] === "ko";
+        _localizeStrings = isKorean ? { ...strs, ...koStringOverrides } : strs;
     }
 
     export function translationsCache() {
