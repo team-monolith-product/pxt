@@ -4374,8 +4374,8 @@ export class ProjectView
         return matches;
     }
 
-    highlightToolboxBlocks(blockTypes: string[]) {
-        this.blocksEditor.highlightToolboxBlocks(blockTypes);
+    highlightToolboxBlocks(targets: pxt.editor.HighlightTarget[]) {
+        this.blocksEditor.highlightToolboxBlocks(targets);
     }
 
     getBlockAsText(blockId: string): pxt.editor.BlockAsText | undefined {

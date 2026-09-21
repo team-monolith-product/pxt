@@ -485,15 +485,24 @@ declare namespace pxt.editor {
         blockAsText: pxt.editor.BlockAsText | undefined;
     }
 
+    export type HighlightTarget =
+        | {
+            kind: "block";
+            type: string;
+        }
+        | {
+            kind: "function";
+            type: "function_call" | "function_call_output";
+            functionName: string;
+        };
+
     export interface EditorMessageHighlightBlocksRequest extends EditorMessageRequest {
         action: "highlightblocks";
         /**
-         * Block types to highlight in the toolbox flyout. The category of the first one is opened.
-         * A function block may carry the function name after a colon (`function_call:name` or
-         * `function_call:name:arg:type`), in which case only that function's blocks match.
+         * Blocks to highlight in the toolbox flyout. The category of the first target is opened.
          * An empty list clears every highlight.
          */
-        blockTypes: string[];
+        targets: pxt.editor.HighlightTarget[];
     }
 
     export interface EditorMessageServiceWorkerRegisteredRequest extends EditorMessageRequest {
@@ -1064,7 +1073,7 @@ declare namespace pxt.editor {
         getBlocks(): any[];
         getToolboxCategories(advanced?: boolean): pxt.editor.EditorMessageGetToolboxCategoriesResponse;
         getBlockAsText(blockId: string): pxt.editor.BlockAsText | undefined;
-        highlightToolboxBlocks(blockTypes: string[]): void;
+        highlightToolboxBlocks(targets: pxt.editor.HighlightTarget[]): void;
 
         toggleHighContrast(): void;
         setHighContrast(on: boolean): void;
