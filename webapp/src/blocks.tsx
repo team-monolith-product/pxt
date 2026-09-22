@@ -860,6 +860,9 @@ export class Editor extends toolboxeditor.ToolboxEditor {
                 this.changeCallback();
                 this.markIncomplete = false;
             }
+            if (ev.type === Blockly.Events.BLOCK_CREATE || ev.type === Blockly.Events.BLOCK_DELETE) {
+                this.dropChangedToolboxHighlights();
+            }
             if (ev.type == Blockly.Events.CREATE) {
                 let blockId = ev.xml.getAttribute('type');
                 if (blockId == "variables_set") {
@@ -1437,6 +1440,45 @@ export class Editor extends toolboxeditor.ToolboxEditor {
         this.showFlyoutInternal_(pxtblockly.createFunctionsFlyoutCategory(this.editor), "functions", true);
     }
 
+    // Blocks the host asked to highlight, with how many of them the workspace held at that moment.
+    // A highlight is dropped as soon as the student adds or removes that kind of block.
+    private blockHighlights: { target: pxt.editor.HighlightTarget, count: number }[] = [];
+
+    highlightToolboxBlocks(targets: pxt.editor.HighlightTarget[]) {
+        if (!this.editor) return;
+
+        this.blockHighlights = targets.map(target => ({ target, count: this.countWorkspaceBlocks(target) }));
+
+        // Opening the category re-renders the flyout, which applies the highlight.
+        if (targets.length > 0 && this.toolbox) {
+            this.toolbox.selectCategoryOfBlock(targets[0].type);
+        }
+        this.refreshFlyoutHighlights();
+    }
+
+    private countWorkspaceBlocks(target: pxt.editor.HighlightTarget) {
+        return this.editor.getAllBlocks(false).filter(block => matchesHighlightTarget(block, target)).length;
+    }
+
+    private dropChangedToolboxHighlights() {
+        const kept = this.blockHighlights.filter(({ target, count }) => this.countWorkspaceBlocks(target) === count);
+        if (kept.length === this.blockHighlights.length) return;
+
+        this.blockHighlights = kept;
+        this.refreshFlyoutHighlights();
+    }
+
+    // The flyout caches its blocks per category, so a cached block keeps its highlight until it is shown again.
+    // That is why this also turns highlights off, not only on.
+    private refreshFlyoutHighlights() {
+        const flyout = this.editor?.getFlyout();
+        if (!flyout?.isVisible()) return;
+
+        for (const block of flyout.getWorkspace().getTopBlocks(false)) {
+            block.setHighlighted(this.blockHighlights.some(({ target }) => matchesHighlightTarget(block, target)));
+        }
+    }
+
     getViewState() {
         // ZOOM etc
         return {}
@@ -1552,6 +1594,7 @@ export class Editor extends toolboxeditor.ToolboxEditor {
                 // serial editor is more like an overlay than a custom editor, so preserve blocks undo stack
                 if (!this.parent.shouldPreserveUndoStack()) pxtblockly.clearWithoutEvents(this.editor);
                 this.closeFlyout();
+                this.blockHighlights = [];
 
                 this.filterToolbox();
                 if (this.parent.state.editorState && this.parent.state.editorState.hasCategories != undefined) {
@@ -2268,6 +2311,7 @@ export class Editor extends toolboxeditor.ToolboxEditor {
         const flyout = this.editor.getFlyout();
         flyout.show(xmlList);
         flyout.scrollToStart();
+        this.refreshFlyoutHighlights();
     }
 
     // For editors that have no toolbox
@@ -2663,6 +2707,12 @@ function disposeOfTemporaryAssets(workspace: Blockly.Workspace) {
 
 function clearTemporaryAssetBlockData(workspace: Blockly.Workspace) {
     forEachImageField(workspace, field => field.clearTemporaryAssetData());
+}
+
+function matchesHighlightTarget(block: Blockly.Block, target: pxt.editor.HighlightTarget) {
+    if (block.type !== target.type) return false;
+    // A function target names one function, so only that function's call blocks match.
+    return target.kind !== "function" || (block as pxtblockly.FunctionCallBlock).getName() === target.functionName;
 }
 
 async function setHighlightWarningAsync(block: Blockly.BlockSvg, enabled: boolean) {

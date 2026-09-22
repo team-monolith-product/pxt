@@ -78,6 +78,7 @@ declare namespace pxt.editor {
         | "setlanguagerestriction"
         | "gettoolboxcategories"
         | "getblockastext"
+        | "highlightblocks" // EditorMessageHighlightBlocksRequest
 
         | "toggletrace" // EditorMessageToggleTraceRequest
         | "showthemepicker"
@@ -482,6 +483,26 @@ declare namespace pxt.editor {
 
     export interface EditorMessageGetBlockAsTextResponse {
         blockAsText: pxt.editor.BlockAsText | undefined;
+    }
+
+    export type HighlightTarget =
+        | {
+            kind: "block";
+            type: string;
+        }
+        | {
+            kind: "function";
+            type: "function_call" | "function_call_output";
+            functionName: string;
+        };
+
+    export interface EditorMessageHighlightBlocksRequest extends EditorMessageRequest {
+        action: "highlightblocks";
+        /**
+         * Blocks to highlight in the toolbox flyout. The category of the first target is opened.
+         * An empty list clears every highlight.
+         */
+        targets: pxt.editor.HighlightTarget[];
     }
 
     export interface EditorMessageServiceWorkerRegisteredRequest extends EditorMessageRequest {
@@ -1052,6 +1073,7 @@ declare namespace pxt.editor {
         getBlocks(): any[];
         getToolboxCategories(advanced?: boolean): pxt.editor.EditorMessageGetToolboxCategoriesResponse;
         getBlockAsText(blockId: string): pxt.editor.BlockAsText | undefined;
+        highlightToolboxBlocks(targets: pxt.editor.HighlightTarget[]): void;
 
         toggleHighContrast(): void;
         setHighContrast(on: boolean): void;

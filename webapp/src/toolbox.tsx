@@ -288,6 +288,22 @@ export class Toolbox extends data.Component<ToolboxProps, ToolboxState> {
         }
     }
 
+    /**
+     * Opens the category that holds blocks of `blockType`.
+     * Variable and function blocks are built on the fly rather than listed on their category,
+     * so those categories are matched by the block type prefix.
+     */
+    selectCategoryOfBlock(blockType: string) {
+        const index = (this.items || []).findIndex(item => {
+            if (blockType.startsWith("variables_")) return item.nameid === CategoryNameID.Variables;
+            if (blockType.startsWith("function_")) return item.nameid === CategoryNameID.Functions;
+            return !!item.blocks?.some(block => block.attributes.blockId === blockType);
+        });
+        if (index >= 0) {
+            this.setSelection(this.items[index], index, true);
+        }
+    }
+
     moveFocusToFlyout() {
         const { parent } = this.props;
         parent.moveFocusToFlyout();

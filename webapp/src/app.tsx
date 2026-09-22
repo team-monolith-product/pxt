@@ -4374,6 +4374,10 @@ export class ProjectView
         return matches;
     }
 
+    highlightToolboxBlocks(targets: pxt.editor.HighlightTarget[]) {
+        this.blocksEditor.highlightToolboxBlocks(targets);
+    }
+
     getBlockAsText(blockId: string): pxt.editor.BlockAsText | undefined {
         const blocksWithId = this.getBlocksWithId(blockId);
         let readableName: pxt.editor.BlockAsText = undefined;

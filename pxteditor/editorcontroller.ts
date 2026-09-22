@@ -218,6 +218,11 @@ export function bindEditorMessages(getEditorAsync: () => Promise<IProjectView>) 
                                         resp = { blockAsText: readableName } as pxt.editor.EditorMessageGetBlockAsTextResponse;
                                     });
                             }
+                            case "highlightblocks": {
+                                const msg = data as pxt.editor.EditorMessageHighlightBlocksRequest;
+                                return Promise.resolve()
+                                    .then(() => projectView.highlightToolboxBlocks(msg.targets));
+                            }
                             case "renderpython": {
                                 const rendermsg = data as pxt.editor.EditorMessageRenderPythonRequest;
                                 return Promise.resolve()
