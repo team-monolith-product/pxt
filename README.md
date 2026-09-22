@@ -64,33 +64,6 @@ npm install
 npm run build
 ```
 
-## Team Monolith Build & Publish
-
-npm 패키지 빌드 및 배포 프로세스:
-
-1. package.json의 version 필드 업데이트
-
-2. 빌드를 위해 package.json의 name 필드를 `pxt-core`로 임시 수정
-   ```json
-   "name": "pxt-core"
-   ```
-
-3. 빌드 실행
-   ```bash
-   npm install
-   npm run build
-   ```
-
-4. 배포를 위해 package.json의 name 필드를 `@team-monolith/pxt-core`로 원복
-   ```json
-   "name": "@team-monolith/pxt-core"
-   ```
-
-5. npm 배포
-   ```bash
-   npm publish
-   ```
-
 Then install the `pxt` command line tool (only need to do it once):
 
 ```
@@ -169,6 +142,27 @@ you can find the distribution at [https://highlightjs.org/download/](https://hig
 select all the languages you want to include (including the ones above!),
 download and unzip,
 and finally copy over `highlight.min.js` as `webapp/public/highlight.js/highlight.pack.js`.
+
+## Team Monolith Build & Publish
+
+이 저장소는 `@team-monolith/pxt-core` 라는 이름으로 npm 에 배포합니다.
+
+1. `package.json` 의 `version` 을 올립니다.
+
+2. 빌드합니다.
+   ```bash
+   npm install
+   npm run build
+   ```
+
+3. 배포합니다.
+   ```bash
+   npm publish
+   ```
+
+배포한 버전은 pxt-microbit `package.json` 의 `pxt-core` 의존성에 반영합니다.
+
+[#60](https://github.com/team-monolith-product/pxt/pull/60) 이전에는 빌드 전에 `name` 을 `pxt-core` 로 바꿨다가 배포 전에 되돌려야 했습니다. 지금은 필요 없습니다.
 
 ## Tests
 
