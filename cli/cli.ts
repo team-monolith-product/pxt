@@ -421,6 +421,10 @@ function checkIfTaggedCommitAsync() {
 
 let readJson = nodeutil.readJson;
 
+function isPxtCorePackage(pkg: any): boolean {
+    return /^(@[^/]+\/)?pxt-core$/.test(pkg["name"]);
+}
+
 async function ciAsync(parsed?: commandParser.ParsedCommand) {
     const intentToPublish = parsed && parsed.flags["publish"];
     const tagOverride = parsed && parsed.flags["tag"] as string;
@@ -501,7 +505,7 @@ async function ciAsync(parsed?: commandParser.ParsedCommand) {
         return nodeutil.runNpmAsync("publish");
     }
 
-    if (pkg["name"] == "pxt-core") {
+    if (isPxtCorePackage(pkg)) {
         pxt.log("pxt-core build");
 
         const isTaggedCommit = await checkIfTaggedCommitAsync();
@@ -572,7 +576,7 @@ function lintJSONInDirectory(dir: string) {
 
 function bumpPxtCoreDepAsync(): Promise<void> {
     let pkg = readJson("package.json")
-    if (pkg["name"] == "pxt-core") return Promise.resolve(pkg)
+    if (isPxtCorePackage(pkg)) return Promise.resolve(pkg)
 
     let gitPull = Promise.resolve();
     let commitMsg: string = "";
@@ -2144,7 +2148,7 @@ async function buildSemanticUIAsync(parsed?: commandParser.ParsedCommand) {
     }
 
     const pkg = readJson("package.json");
-    const isPxtCore = pkg["name"] === "pxt-core";
+    const isPxtCore = isPxtCorePackage(pkg);
 
     nodeutil.mkdirP(path.join("built", "web"));
     const lessPath = require.resolve('less');
