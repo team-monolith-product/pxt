@@ -421,11 +421,6 @@ function checkIfTaggedCommitAsync() {
 
 let readJson = nodeutil.readJson;
 
-/**
- * package.json 의 name 으로 지금 빌드하는 것이 pxt-core 자신인지 봅니다.
- * 이 저장소는 npm 스코프를 붙여 @team-monolith/pxt-core 로 내보내므로
- * upstream 처럼 이름을 그대로 비교하면 타깃을 빌드하는 것으로 잘못 봅니다.
- */
 function isPxtCorePackage(pkg: any): boolean {
     return /^(@[^/]+\/)?pxt-core$/.test(pkg["name"]);
 }
