@@ -301,8 +301,6 @@ export class Toolbox extends data.Component<ToolboxProps, ToolboxState> {
         });
         if (index >= 0) {
             const item = this.items[index];
-            // setSelection expands "Advanced" only after a customClick category (Functions) has opened its flyout,
-            // and expanding closes that flyout again. Expand first so the category stays open.
             if (item.advanced && !this.state.showAdvanced) this.showAdvanced();
             this.setSelection(item, index, true);
         }
