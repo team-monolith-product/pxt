@@ -300,7 +300,9 @@ export class Toolbox extends data.Component<ToolboxProps, ToolboxState> {
             return !!item.blocks?.some(block => block.attributes.blockId === blockType);
         });
         if (index >= 0) {
-            this.setSelection(this.items[index], index, true);
+            const item = this.items[index];
+            if (item.advanced && !this.state.showAdvanced) this.showAdvanced();
+            this.setSelection(item, index, true);
         }
     }
 
