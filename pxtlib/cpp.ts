@@ -1348,8 +1348,7 @@ namespace pxt.hexloader {
         else {
             let curr = getOnlineCdnUrl()
             if (curr) return (cdnUrlPromise = Promise.resolve(curr))
-            const forceLive = pxt.webConfig && pxt.webConfig.isStatic;
-            return (cdnUrlPromise = Cloud.privateGetAsync("clientconfig", forceLive)
+            return (cdnUrlPromise = U.httpGetJsonAsync("https://www.makecode.com/api/clientconfig")
                 .then(r => r.primaryCdnUrl));
         }
     }
@@ -1372,7 +1371,12 @@ namespace pxt.hexloader {
                         return U.httpGetTextAsync(hexurl + ".hex")
                     })
                     .then(r => r, e =>
-                        Cloud.privatePostAsync("compile/extension", { data: extInfo.compileData }, true)
+                        U.requestAsync({
+                            url: "https://www.makecode.com/api/compile/extension",
+                            method: "POST",
+                            data: { data: extInfo.compileData },
+                            allowGzipPost: true
+                        }).then(resp => resp.json)
                             .then(ret => new Promise<string>((resolve, reject) => {
                                 let retry = 0;
                                 const delay = 8000; // ms
@@ -1436,7 +1440,7 @@ namespace pxt.hexloader {
                 url: `${pxt.webConfig.cdnUrl}hexcache/${extInfo.sha}.hex`
             })
                 .then((resp) => {
-                    if (resp.text) {
+                    if (resp.text && /^:[0-9a-f]/i.test(resp.text)) {
                         const result: any = {
                             enums: [],
                             functions: [],
@@ -1534,7 +1538,7 @@ namespace pxt.hexloader {
                     pxt.log('invalid cache entry, clearing entry');
                     cachedMeta = null;
                 }
-                if (cachedMeta && cachedMeta.hex) {
+                if (cachedMeta && cachedMeta.hex && /^[:@!][0-9a-f]/i.test(cachedMeta.hex[0])) {
                     pxt.debug("cache hit, size=" + res.length)
                     cachedMeta.hex = decompressHex(cachedMeta.hex)
                     return recordGetAsync(host, "hex-keys", key)

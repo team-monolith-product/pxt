@@ -736,6 +736,7 @@ const lint = lintWithEslint
 const testdecompiler = testTask("decompile-test", "decompilerunner.js");
 const testlang = testTask("compile-test", "compilerunner.js");
 const testhelpers = testTask("helpers-test", "helperrunner.js");
+const testhexloader = testTask("hexloader-test", "hexrunner.js");
 const testerr = testTask("errors-test", "errorrunner.js");
 const testfmt = testTask("format-test", "formatrunner.js");
 const testpydecomp = testTask("pydecompile-test", "pydecompilerunner.js");
@@ -773,6 +774,7 @@ const testAll = gulp.series(
     testdecompiler,
     testlang,
     testhelpers,
+    testhexloader,
     testerr,
     testfmt,
     testpydecomp,
@@ -902,6 +904,7 @@ exports.onlinelearning = onlinelearning;
 exports.tt = teacherTool;
 exports.icons = buildSVGIcons;
 exports.testhelpers = testhelpers;
+exports.testhexloader = testhexloader;
 exports.testpxteditor = testpxteditor;
 exports.reactCommon = reactCommon;
 exports.cli = gulp.series(
