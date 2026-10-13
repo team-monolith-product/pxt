@@ -1538,7 +1538,7 @@ namespace pxt.hexloader {
                     pxt.log('invalid cache entry, clearing entry');
                     cachedMeta = null;
                 }
-                if (cachedMeta && cachedMeta.hex && /^[:@!][0-9a-f]/i.test(cachedMeta.hex[0])) {
+                if (cachedMeta && cachedMeta.hex) {
                     pxt.debug("cache hit, size=" + res.length)
                     cachedMeta.hex = decompressHex(cachedMeta.hex)
                     return recordGetAsync(host, "hex-keys", key)
